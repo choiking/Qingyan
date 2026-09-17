@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleIdentifier</key><string>org.localinput.Voice</string>
+<key>CFBundleName</key><string>Qingyan Voice</string>
+<key>CFBundleDisplayName</key><string>轻言语音</string>
+<key>CFBundleExecutable</key><string>LocalInputVoice</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleShortVersionString</key><string>0.1.15</string>
+<key>CFBundleVersion</key><string>16</string>
+<key>LSMinimumSystemVersion</key><string>14.0</string>
+<key>LSUIElement</key><true/>
+<key>NSPrincipalClass</key><string>NSApplication</string>
+<key>NSMicrophoneUsageDescription</key><string>轻言仅在你启动语音输入时使用麦克风。录音在本机内存中识别，不会上传或保存。</string>
+<key>NSHighResolutionCapable</key><true/>
+</dict></plist>
