@@ -21,7 +21,7 @@ case "register":
         fputs("Registered bundle; log out and back in if the input source is not listed yet.\n", stderr); exit(1)
     }
     check(TISEnableInputSource(source), "Enable input source")
-    print("Enabled 轻言 Qingyan. Your selected input source has not been changed.")
+    print("Enabled 轻言输入法. Your selected input source has not been changed.")
 case "disable":
     if let source = sources().first(where: { property($0, kTISPropertyInputSourceID) as? String == id }) {
         if property(source, kTISPropertyInputSourceIsSelected) as? Bool == true {
@@ -35,6 +35,8 @@ case "status":
         let sourceID = property(source, kTISPropertyInputSourceID) as? String ?? ""
         if sourceID == id || property(source, kTISPropertyInputSourceIsSelected) as? Bool == true {
             print("\(sourceID) enabled=\(property(source, kTISPropertyInputSourceIsEnabled) ?? false as AnyObject) selected=\(property(source, kTISPropertyInputSourceIsSelected) ?? false as AnyObject)")
+            print("  name=\(property(source, kTISPropertyLocalizedName) ?? "" as AnyObject)")
+            print("  icon=\(property(source, kTISPropertyIconImageURL) ?? "" as AnyObject)")
         }
     }
 default: fputs("Usage: input-source register APP | status | disable\n", stderr); exit(2)

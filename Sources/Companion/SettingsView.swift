@@ -16,7 +16,7 @@ struct SettingsView: View {
             HStack(spacing: 14) {
                 Image(systemName: "waveform.circle.fill").font(.system(size: 48)).foregroundStyle(.teal)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("轻言").font(.system(size: 30, weight: .semibold))
+                    Text("轻言输入法").font(.system(size: 30, weight: .semibold))
                     Text("Qingyan · 想说就说，想打就打。").foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -26,7 +26,7 @@ struct SettingsView: View {
             GroupBox {
                 VStack(alignment: .leading, spacing: 12) {
                     Label("开始使用", systemImage: "keyboard") .font(.headline)
-                    Text("1. 在系统设置中添加「轻言 Qingyan」输入源。\n2. 单按 Shift 切换中 / 英文；切到英文时，未确认内容按原始字母输入。\n3. 按住 \(service.settings.voiceShortcut.displayName) 说话，文字实时显示，松开定稿。")
+                    Text("1. 在系统设置中添加「轻言输入法」输入源。\n2. 单按 Shift 切换中 / 英文；切到英文时，未确认内容按原始字母输入。\n3. 按住 \(service.settings.voiceShortcut.displayName) 说话，文字实时显示，松开定稿。")
                         .lineSpacing(6).foregroundStyle(.secondary)
                     HStack {
                         Button("打开键盘设置") {

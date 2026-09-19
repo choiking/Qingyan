@@ -24,7 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         service = VoiceService()
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 540, height: 700),
             styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
-        window.title = "轻言 · Qingyan"
+        window.title = "轻言输入法"
         window.isReleasedWhenClosed = false
         window.contentView = NSHostingView(rootView: SettingsView(service: service))
         window.center()

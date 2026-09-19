@@ -93,7 +93,7 @@ final class VoiceService: NSObject, ObservableObject {
         refreshMicrophonePermission()
         guard microphoneGranted else {
             publish("error", microphoneStatus == .denied ?
-                "麦克风权限被拒绝，请在系统设置中允许“轻言 Qingyan”使用麦克风" :
+                "麦克风权限被拒绝，请在系统设置中允许“轻言输入法”使用麦克风" :
                 "请打开轻言设置，点击“授予麦克风权限”，然后在系统弹窗中允许")
             return
         }
@@ -134,7 +134,7 @@ final class VoiceService: NSObject, ObservableObject {
             return
         }
         if microphoneStatus == .denied {
-            detail = "请在系统设置 → 隐私与安全性 → 麦克风中，允许“轻言 Qingyan”（或 Qingyan Voice）。"
+            detail = "请在系统设置 → 隐私与安全性 → 麦克风中，允许“轻言输入法”（或“轻言语音”）。"
             NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!)
             return
         }

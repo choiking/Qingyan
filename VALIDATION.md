@@ -1,4 +1,14 @@
-# Validation — 2026-09-12
+# Validation — updated 2026-09-18
+
+## 0.1.16 — 轻言输入法 rebrand (2026-09-18)
+
+- Reviewed the pending name and two-character icon changes. Standardized the input-source bundle name, settings heading/window title, setup instructions, microphone guidance, installer output and README on 「轻言输入法」. The voice helper now uses 「轻言语音」 for both bundle names. Internal bundle IDs, executable names and data paths remain stable for existing settings and permissions; short 「轻言设置」 labels and the Qingyan romanization remain intentional.
+- The template badge contains transparent 「轻言」 lettering at 30 × 16 points, with 30 × 16 and 60 × 32 pixel TIFF representations. Assigned the distinct resource URL `InputIcon-Qingyan.tiff` to avoid the previous single-character icon cache. Inspected `build/icon-preview-0.1.16.png` and checked the installed TIFF's dimensions, monochrome mask and transparent interior (`build/rebrand-icon-0.1.16.log`).
+- `bash Scripts/build.sh` and `bash Scripts/test.sh` passed, including pinned dependency checksums, Ice/Rime vocabulary and grammar, custom phrases, native composition, shortcut/state guards, correction rules, bundle permission declarations, plist validation and strict signing. Logs: `build/rebrand-build-0.1.16.log`, `build/rebrand-tests-0.1.16.log`. The restricted build initially blocked Xcode's SwiftUI macro process; the normal local build succeeded. Sandboxed native tests emitted input-service connection warnings but all assertions passed.
+- Installed version **0.1.16 (17)** at `~/Library/Input Methods/LocalInput.app` using `Scripts/install.sh`; the previous bundle is backed up at `~/Library/Application Support/LocalInput/Backups/20260918-225614.app`. Installed outer/helper plists, executables and icon match the built files by SHA-256; installed deep/strict signature verification passed. Log: `build/rebrand-install-0.1.16.log`.
+- **Verified in macOS UI:** System Settings → Keyboard → Text Input → Edit visibly lists 「轻言输入法」 with the two-character 「轻言」 badge. The live Carbon/TIS registry reports `enabled=1`, `selected=1`, localized name 「轻言输入法」, and an icon URL resolving to the installed `Contents/Resources/InputIcon-Qingyan.tiff`. The same source was already selected before installation; installation preserved that selection. Log: `build/rebrand-input-source-0.1.16.log`. `input-source status` now includes the registered name and icon URL for future checks.
+- Rendered and inspected the rebuilt settings view (`build/settings-0.1.16.png`): the full heading and onboarding name fit without clipping, and the existing left-Option shortcut is retained. The sandboxed render could not launch AppKit; the normal local render completed.
+- This acceptance covers the rebrand and installed input-source presentation. Microphone-to-target acceptance and the broader external-app compatibility matrix remain untested here; historical limitations below still apply.
 
 ## 0.1.10 — black badge
 

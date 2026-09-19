@@ -16,4 +16,4 @@ fi
 ditto "$APP" "$TARGET"
 "$PWD/build/input-source" register "$TARGET"
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$TARGET/Contents/Helpers/LocalInput Voice.app"
-printf 'Installed: %s\nSelect 轻言 Qingyan in the input menu to try it.\n' "$TARGET"
+printf 'Installed: %s\nSelect 轻言输入法 in the input menu to try it.\n' "$TARGET"
