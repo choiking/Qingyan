@@ -22,6 +22,7 @@ final class LocalCorrector {
         config.connectionProxyDictionary = [:]
         config.urlCache = nil
         config.httpCookieStorage = nil
+        // Longer than the correction deadline: preparation also loads the model from disk.
         config.timeoutIntervalForRequest = 8
         config.timeoutIntervalForResource = 8
         return URLSession(configuration: config, delegate: delegate, delegateQueue: nil)

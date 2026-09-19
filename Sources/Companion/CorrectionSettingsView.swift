@@ -46,7 +46,7 @@ struct CorrectionSettingsView: View {
                                 service.saveSettings()
                                 if service.settings.correctionEnabled { service.prepareCorrection() }
                             }
-                        Text("边说边显示；松开后检查错字和标点，不润色、不扩写。纠错最多等待 8 秒，失败或改动过大时保留原文。")
+                        Text("边说边显示；松开后检查错字和标点，不润色、不扩写。纠错最多等待 4 秒，失败或改动过大时保留原文。")
                             .font(.callout).foregroundStyle(.secondary)
                         HStack {
                             Text(service.correctionStatus).font(.caption).foregroundStyle(.secondary)

@@ -275,7 +275,7 @@ final class VoiceService: NSObject, ObservableObject {
             }
         }
         // An absolute deadline also bounds server startup and model warm-up.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
             guard let self, self.request?.id == id, self.phase == "correcting" else { return }
             self.correctionTask?.cancel(); self.correctionTask = nil
             self.publish("ready", "纠错等待超时，已保留原文")
