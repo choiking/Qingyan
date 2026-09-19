@@ -16,8 +16,8 @@ macOS 原生中文 / 英文 / 离线语音输入法，当前为 **0.1.15 开发�
 
 ## 已实现
 
-- Rime 全拼、简体输出、整词 / 整句候选、本地词频学习。
-- 内置八股文（octagram）语法模型 `zh-hant-t-essay-bgw`，按上下文组句。例如 `wozhuzainali` 得到「我住在那里」而非「握住在哪里」，`wodemingzijiaolixiaoming` 得到「我的名字叫李小名」而非「我的名字角力小明」。它是概率模型，个别词组可能反而变差。
+- Rime 全拼、简体输出、整词 / 整句候选、本地词频学习。中文主词库采用 [雾凇拼音](https://github.com/iDvel/rime-ice) 的常用字表、基础词库、扩展词库、腾讯词向量及杂项词库，包含「老登」「显眼包」「情绪价值」等词。
+- 内置八股文（octagram）简体语法模型 `zh-hans-t-essay-bgw`，按上下文组句。它是概率模型，个别词组可能反而变差。
 - 空格选择当前候选、1–5 数字选词、鼠标选择、上下键选择、减号 / 等号或 Page Up / Page Down 翻页。
 - 「常用词」列表同时用于打字：自动按字推导拼音写成 Rime 自定义短语表，专有名词排在词库候选之前。
 - 英文直接输入、大小写和常用应用快捷键透传。
@@ -86,6 +86,21 @@ bash Scripts/install.sh
 
 `bootstrap.py` 使用 `dependencies.lock.json` 中的版本和 SHA-256 下载依赖。`build.sh` 检查下载文件校验和，编译 Swift / Objective-C、预编译词库、打包模型并进行本机 ad-hoc 签名。
 
+### 更新雾凇词库
+
+雾凇由上游持续维护；轻言按固定提交打包词库，打字仍然离线。以下命令从上游取得最新词库、更新版本与校验和，通过构建和测试后安装：
+
+```sh
+python3 Scripts/update-dictionary.py
+bash Scripts/build.sh
+bash Scripts/test.sh
+bash Scripts/install.sh
+```
+
+目前需要主动执行更新，没有后台定时下载。更新脚本只导入词库和归属声明，不执行上游脚本；也支持 `--revision <完整提交号>` 指定版本。安装完成后重新启动输入法进程才能加载新词库。
+
+轻言沿用现有全拼配置和 `luna_pinyin_simp` 内部方案 ID，实际主词库为 `rime_ice`；保留 `luna_pinyin` 用户学习库和个人常用词。原朙月字典仅用于个人常用词的拼音推导，不再作为主候选词库。未引入雾凇完整方案的 Lua 功能与快捷键。
+
 产物：`build/LocalInput.app`。它是本机开发构建，尚未完成 Developer ID 签名与公证。
 
 卸载：
@@ -119,4 +134,4 @@ bash Scripts/uninstall.sh
 
 本项目以 **GPL-3.0** 发布，许可全文见 `LICENSE`。
 
-选择 GPL-3.0 是因为构建产物捆绑并在运行时加载 GPL-3.0 的 librime-octagram 插件，以及 LGPL-3.0 的 `zh-hant-t-essay-bgw.gram` 语法模型；整包分发需要与之兼容的条款。若从 `Scripts/build.sh` 中移除这两项，语法功能退化为 no-op，其余部分不变，届时可另行考虑授权方式。各第三方组件仍按其各自许可证授权，详见 `THIRD_PARTY.md`。
+构建产物包含 GPL-3.0 的雾凇拼音词库、librime-octagram 插件，以及 LGPL-3.0 的 `zh-hans-t-essay-bgw.gram` 语法模型。各第三方组件仍按其各自许可证授权，详见 `THIRD_PARTY.md`。

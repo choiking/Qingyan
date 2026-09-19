@@ -1,0 +1,7 @@
+# Keep the schema ID and learned user dictionary for existing installations.
+# The actual system vocabulary is Ice, with the matching simplified model.
+patch:
+  schema/name: 轻言·雾凇拼音
+  translator/dictionary: rime_ice
+  translator/user_dict: luna_pinyin
+  grammar/language: zh-hans-t-essay-bgw

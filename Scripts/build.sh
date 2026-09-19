@@ -21,12 +21,16 @@ mkdir -p "$APP/Contents/Frameworks/rime-plugins"
 cp Vendor/rime/dist/lib/rime-plugins/librime-octagram.dylib "$APP/Contents/Frameworks/rime-plugins/"
 ditto "$FRAMEWORK/whisper.framework" "$VOICE/Contents/Frameworks/whisper.framework"
 cp Vendor/Models/ggml-small-q5_1.bin "$VOICE/Contents/Resources/Models/"
+# Rime resources are generated output. Clear stale dictionaries/models when
+# switching the bundled vocabulary; personal user data lives elsewhere.
+rm -rf "$APP/Contents/Resources/Rime"
+mkdir -p "$APP/Contents/Resources/Rime"
 cp Vendor/luna-pinyin/*.yaml Vendor/prelude/*.yaml "$APP/Contents/Resources/Rime/"
-cp Vendor/essay/essay.txt "$APP/Contents/Resources/Rime/"
-# luna_pinyin.schema.yaml already carries an optional "grammar:/hant?" patch; these
-# two files are what make it resolve. The vocabulary (essay.txt) is traditional, so
-# the traditional model is the matching one even though output is simplified.
-cp Vendor/octagram/grammar.yaml Vendor/octagram/zh-hant-t-essay-bgw.gram "$APP/Contents/Resources/Rime/"
+ditto Vendor/rime-ice/cn_dicts "$APP/Contents/Resources/Rime/cn_dicts"
+cp Resources/Rime/*.yaml "$APP/Contents/Resources/Rime/"
+# The luna dictionary is kept only for personal-phrase pronunciation lookup.
+# The active translator uses Ice; no preset essay vocabulary is imported.
+cp Vendor/octagram/grammar.yaml Vendor/octagram/zh-hans-t-essay-bgw.gram "$APP/Contents/Resources/Rime/"
 ditto Vendor/rime/share/opencc "$APP/Contents/Resources/Rime/opencc"
 cat > "$APP/Contents/Resources/Rime/default.custom.yaml" <<'YAML'
 patch:
@@ -38,9 +42,10 @@ YAML
 mkdir -p "$APP/Contents/Resources/Licenses"
 cp Vendor/RIME-LICENSE "$APP/Contents/Resources/Licenses/librime.txt"
 cp Vendor/WHISPER-LICENSE "$APP/Contents/Resources/Licenses/whisper.cpp.txt"
-for repo in luna-pinyin prelude essay; do
+for repo in luna-pinyin prelude rime-ice; do
   if test -f "Vendor/$repo/LICENSE"; then cp "Vendor/$repo/LICENSE" "$APP/Contents/Resources/Licenses/$repo.txt"; fi
 done
+cp Vendor/rime-ice/others/docs/Credits.md "$APP/Contents/Resources/Licenses/rime-ice-credits.md"
 cp THIRD_PARTY.md "$APP/Contents/Resources/Licenses/"
 cp Vendor/Licenses/* "$APP/Contents/Resources/Licenses/"
 cp dependencies.lock.json "$APP/Contents/Resources/Licenses/"
@@ -57,6 +62,7 @@ xcrun swiftc -swift-version 5 -O -target arm64-apple-macos14.0 \
   Sources/Shared/*.swift Sources/Companion/*.swift \
   -F "$VOICE/Contents/Frameworks" -framework whisper -framework AppKit -framework SwiftUI -framework AVFoundation \
   -Xlinker -rpath -Xlinker '@executable_path/../Frameworks' -o "$VOICE/Contents/MacOS/LocalInputVoice"
+rm -rf "$BUILD/deploy-user"
 mkdir -p "$BUILD/deploy-user"
 "$APP/Contents/MacOS/LocalInput" --deploy-rime "$APP/Contents/Resources/Rime" "$BUILD/deploy-user"
 ditto "$BUILD/deploy-user/build" "$APP/Contents/Resources/Rime/build"

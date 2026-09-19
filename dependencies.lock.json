@@ -51,9 +51,9 @@
       "strip_components": 0
     },
     {
-      "path": "octagram/zh-hant-t-essay-bgw.gram",
-      "url": "https://raw.githubusercontent.com/lotem/rime-octagram-data/97bf55046aad163c3d1881abae5312040b1bbed9/zh-hant-t-essay-bgw.gram",
-      "sha256": "0488ebd6688f900a39200f2b794f2f99bcbf1e8fc27280ae4a2324b08b1559c1",
+      "path": "octagram/zh-hans-t-essay-bgw.gram",
+      "url": "https://raw.githubusercontent.com/lotem/rime-octagram-data/f8ce3b534733e489a8470a7c2adf5a154e8ea069/zh-hans-t-essay-bgw.gram",
+      "sha256": "d3cb2438c1fdcd6a855dd6ca8f5c1060a29273c6b64c2c2c69af67cd71b6aa7e",
       "extract_to": null,
       "strip_components": 0
     },
@@ -161,6 +161,13 @@
       "sha256": "9fa02db000d8178643a592032fab2e1d2ba6d9e2f609f149fc113d30d32dbea2",
       "extract_to": null,
       "strip_components": 0
+    },
+    {
+      "path": "rime-ice.tar.gz",
+      "url": "https://codeload.github.com/iDvel/rime-ice/tar.gz/59fcb4a6bfa71e6ba4fc83af07ee55f0c5b76081",
+      "sha256": "e66e1ff1487be1365b36df959652f5274f54979f9948cba9b4c703b2c4c7b795",
+      "extract_to": "rime-ice",
+      "strip_components": 1
     }
   ]
 }

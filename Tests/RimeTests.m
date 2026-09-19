@@ -40,6 +40,20 @@ int main(int argc, char **argv) { @autoreleasepool {
     [engine clear];
     type(engine, "hanyu");
     check([[engine snapshot][@"candidates"] containsObject:@"汉语"], @"simplified Chinese conversion");
+    [engine clear];
+    // These entries come from the pinned upstream Ice dictionaries, not an
+    // application-maintained hotword list. Exercise the compiled translator.
+    NSDictionary *modernWords = @{
+        @"laodeng": @"老登", @"xianyanbao": @"显眼包",
+        @"qingxujiazhi": @"情绪价值", @"songchigan": @"松弛感"
+    };
+    for (NSString *spelling in modernWords) {
+        type(engine, spelling.UTF8String);
+        check([[engine snapshot][@"candidates"] containsObject:modernWords[spelling]],
+              [@"Ice vocabulary on first page: " stringByAppendingString:modernWords[spelling]]);
+        [engine clear];
+    }
+    type(engine, "hanyu");
     LIRime *other = [LIRime new];
     check([other open], @"second client session");
     check([[other rawInput] isEqual:@""], @"client sessions do not share composition");
@@ -84,5 +98,5 @@ int main(int argc, char **argv) { @autoreleasepool {
     type(engine, "nanshengtu");
     check([[engine snapshot][@"candidates"][0] isEqual:@"\u56fe\u5357\u751f"], @"an invalidated session picks up the edited list");
     [engine clear];
-    puts("PASS: bundled dictionary, phrase conversion, simplified output, selection, paging, deletion, cancellation, session isolation, grammar model, custom phrases");
+    puts("PASS: Ice dictionary and modern vocabulary, phrase conversion, simplified output, selection, paging, deletion, cancellation, session isolation, grammar model, custom phrases");
 } }

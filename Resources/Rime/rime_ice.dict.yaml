@@ -1,0 +1,14 @@
+# Qingyan uses the upstream Ice dictionaries unchanged. Uppercase/mixed-input
+# entries from the upstream root are omitted because Shift belongs to the app.
+---
+name: rime_ice
+version: "1"
+sort: by_weight
+use_preset_vocabulary: false
+import_tables:
+  - cn_dicts/8105
+  - cn_dicts/base
+  - cn_dicts/ext
+  - cn_dicts/tencent
+  - cn_dicts/others
+...
