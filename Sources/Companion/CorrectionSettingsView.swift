@@ -14,7 +14,7 @@ struct CorrectionSettingsView: View {
                 GroupBox {
                     VStack(alignment: .leading, spacing: 10) {
                         Label("常用词提示", systemImage: "character.book.closed").font(.headline)
-                        Text("填写人名、产品名或专业词汇，帮助语音识别选择正确写法。不会强制替换相似词语。")
+                        Text("填写人名、产品名或专业词汇。用于本地纠错和拼音候选，不会强制替换相似词语。")
                             .font(.callout).foregroundStyle(.secondary)
                         Group {
                             if snapshot {

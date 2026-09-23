@@ -233,3 +233,19 @@ Bundled Rime tests passed for hello/nihao/xian, backspace-edited spelling, no Ch
 - 排序测试：完整匹配即使分数更低，也先于部分匹配；部分匹配按覆盖长度递减；相同范围才按分数递减，同组同分保留原顺序。跨页映射与「部分」标记通过。
 - 真实 Jev 联调：三个公开例句各 20 项，全程校验覆盖范围顺序以及组内分数顺序。「汽车」油箱首位、「我现在」又想首位、「请发到我的」邮箱首位。较高分的「游戏」「有」仍排在完整匹配之后。此次覆盖元数据读取约 0.001 秒，非性能保证。
 - 新界面已渲染检查：部分匹配显示「（部分）」，候选栏明确提示完整匹配优先；设置页解释分组与组内排序。
+
+## 语音识别改用 SenseVoice（2026-09-23）
+
+- 识别引擎由 whisper.cpp 1.7.5 + Whisper Small Q5_1 换成 sherpa-onnx 1.13.8 + SenseVoice Small INT8（2024-07-17，开启 ITN，带标点、数字写成阿拉伯数字）。未选 2025-09-09 版：该版为粤语微调，不输出标点。
+- SenseVoice 是非自回归模型，实时预览与定稿走同一次整段解码。Whisper 专用的预览上下文裁剪、1 秒以下补静音、无语音概率过滤全部移除；RMS 静音门槛与“繁转简”保留。
+- 常用词不再送入识别：SenseVoice 没有提示词接口，sherpa-onnx 的热词只支持 transducer 模型。常用词仍用于本地纠错与 Rime 自定义短语。
+- 旧设置里指向 `.bin` 的自定义模型路径自动回退到内置模型；自定义模型须为 `.onnx`，同目录需有 `tokens.txt`。
+- 同一批合成样本（`build/audio-tests`，未提供常用词）：
+  - 中文 5.41 秒：「你好，欢迎使用轻言输入法。今天下午3点开会。」Whisper 未加提示时为「青年输入法」。定稿解码 0.07 秒，进程内首次解码含加载 0.36 秒；Whisper 分别约 0.36 秒与 11 秒。
+  - 英文 4.28 秒：「Hello, welcomecom to local In. Please send the report tomorrow morning.」比 Whisper 差，产品名识别失败。
+  - 中英混合（中文音色合成英文）：自动检测只输出「明天下午3点开会。」，英文段丢失；设为中文时为「明天下午3点开会，plus.」。Whisper 同样未通过。
+  - 模型自带真人样本：普通话、英文、粤语均正确（英文 gold 误为 code）。
+- 修复实测发现的退出崩溃：模型仍在后台加载时调用 `exit()`，ONNX Runtime 静态对象先被销毁导致 SIGSEGV（`--render-settings` 必现）。退出与渲染路径现在先等待识别线程空闲。
+- 单次转写峰值内存约 600 MB。语音辅助应用的运行库 30 MB、模型 228 MB。
+- `bash Scripts/build.sh`、`bash Scripts/test.sh`、`bash Scripts/test-live-speech.sh` 通过。
+- **未做**：真实麦克风的全流程验收，未运行 `Scripts/install.sh`。

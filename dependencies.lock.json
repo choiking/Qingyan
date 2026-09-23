@@ -16,10 +16,17 @@
       "strip_components": 0
     },
     {
-      "path": "whisper.zip",
-      "url": "https://github.com/ggml-org/whisper.cpp/releases/download/v1.7.5/whisper-v1.7.5-xcframework.zip",
-      "sha256": "c7faeb328620d6012e130f3d705c51a6ea6c995605f2df50f6e1ad68c59c6c4a",
-      "extract_to": "whisper",
+      "path": "sherpa-onnx.tar.bz2",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-osx-arm64-shared-no-tts-lib.tar.bz2",
+      "sha256": "f3e0cbd86cc3f38dad30c97921b40e9a8bcc6f2c943777eb76ad77176993e417",
+      "extract_to": "sherpa-onnx",
+      "strip_components": 1
+    },
+    {
+      "path": "sherpa-onnx/include/sherpa-onnx/c-api/c-api.h",
+      "url": "https://raw.githubusercontent.com/k2-fsa/sherpa-onnx/v1.13.8/sherpa-onnx/c-api/c-api.h",
+      "sha256": "2a1b95084be8fd1deb3228fcad2fd3f7f0258b64582f7402281ec174c7b7f4ce",
+      "extract_to": null,
       "strip_components": 0
     },
     {
@@ -65,11 +72,11 @@
       "strip_components": 0
     },
     {
-      "path": "Models/ggml-small-q5_1.bin",
-      "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q5_1.bin",
-      "sha256": "ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb",
-      "extract_to": null,
-      "strip_components": 0
+      "path": "sense-voice.tar.bz2",
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17.tar.bz2",
+      "sha256": "7d1efa2138a65b0b488df37f8b89e3d91a60676e416f515b952358d83dfd347e",
+      "extract_to": "sense-voice",
+      "strip_components": 1
     },
     {
       "path": "RIME-LICENSE",
@@ -79,9 +86,16 @@
       "strip_components": 0
     },
     {
-      "path": "WHISPER-LICENSE",
-      "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/v1.7.5/LICENSE",
-      "sha256": "e562a2ddfaf8280537795ac5ecd34e3012b6582a147ef69ba6a6a5c08c84757d",
+      "path": "Licenses/sherpa-onnx.txt",
+      "url": "https://raw.githubusercontent.com/k2-fsa/sherpa-onnx/v1.13.8/LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "extract_to": null,
+      "strip_components": 0
+    },
+    {
+      "path": "Licenses/onnxruntime.txt",
+      "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.28.2/LICENSE",
+      "sha256": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c",
       "extract_to": null,
       "strip_components": 0
     },
@@ -149,9 +163,9 @@
       "strip_components": 0
     },
     {
-      "path": "Licenses/Whisper-model.txt",
-      "url": "https://raw.githubusercontent.com/openai/whisper/main/LICENSE",
-      "sha256": "b5d65a59060e68c4ff940e1eddfa6f94b2d68fdf58ed7f4dd57721c997e35e9d",
+      "path": "Licenses/SenseVoice-model.txt",
+      "url": "https://raw.githubusercontent.com/modelscope/FunASR/58830eca4012644aac0c3218c3ccc7d98f003fda/MODEL_LICENSE",
+      "sha256": "7dba975a2069691db4992b0592d70828b330d2f8a30a71450f4e152a554e84f8",
       "extract_to": null,
       "strip_components": 0
     },

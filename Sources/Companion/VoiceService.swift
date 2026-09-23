@@ -39,8 +39,11 @@ final class VoiceService: NSObject, ObservableObject {
     private var lastResultAt: Date?
     private var handled = Set<UUID>()
     var modelURL: URL {
-        if !settings.modelPath.isEmpty { return URL(fileURLWithPath: settings.modelPath) }
-        return Bundle.main.resourceURL!.appendingPathComponent("Models/ggml-small-q5_1.bin")
+        // A path saved for the former Whisper engine (.bin) falls back to the bundled model.
+        if !settings.modelPath.isEmpty, settings.modelPath.lowercased().hasSuffix(".onnx") {
+            return URL(fileURLWithPath: settings.modelPath)
+        }
+        return Bundle.main.resourceURL!.appendingPathComponent("Models/sense-voice/model.int8.onnx")
     }
     var busy: Bool { ["starting", "recording", "transcribing", "correcting"].contains(phase) }
     override init() {
@@ -51,8 +54,8 @@ final class VoiceService: NSObject, ObservableObject {
             name: NSNotification.Name("org.localinput.voice.command"), object: nil)
         timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in self?.tick() }
         // Prepare the local model on the same serial worker, without opening the microphone.
-        let model = modelURL.path
-        worker.async { [weak self] in try? self?.recognizer.prepare(model: model) }
+        let model = modelURL.path, language = settings.language
+        worker.async { [weak self] in try? self?.recognizer.prepare(model: model, language: language) }
         // Covers launch before the notification listener is connected.
         if settings.correctionEnabled { prepareCorrection() }
         discoverRequest()
@@ -192,10 +195,9 @@ final class VoiceService: NSObject, ObservableObject {
         let flag = CancellationFlag()
         partialCancellation = flag
         let model = modelURL.path
-        let vocabulary = VoiceVocabulary.prompt(sessionVocabulary)
         worker.async { [weak self] in
             guard let self else { return }
-            let result = Result { try self.recognizer.transcribe(samples, model: model, language: request.language, cancellation: flag, partial: true, vocabulary: vocabulary) }
+            let result = Result { try self.recognizer.transcribe(samples, model: model, language: request.language, cancellation: flag) }
             DispatchQueue.main.async {
                 guard self.request?.id == request.id, self.liveGate.finish(job),
                       !flag.cancelled, self.phase == "recording" else { return }
@@ -214,11 +216,10 @@ final class VoiceService: NSObject, ObservableObject {
             let samples = try capture.finish()
             let model = modelURL.path
             let flag = cancellation
-            let vocabulary = VoiceVocabulary.prompt(sessionVocabulary)
             publish("transcribing", "正在完成语音识别，录音不会上传。")
             worker.async { [weak self] in
                 guard let self else { return }
-                let result = Result { try self.recognizer.transcribe(samples, model: model, language: request.language, cancellation: flag, vocabulary: vocabulary) }
+                let result = Result { try self.recognizer.transcribe(samples, model: model, language: request.language, cancellation: flag) }
                 DispatchQueue.main.async {
                     guard self.request?.id == request.id, !flag.cancelled else { return }
                     switch result {
@@ -281,8 +282,11 @@ final class VoiceService: NSObject, ObservableObject {
             self.publish("ready", "纠错等待超时，已保留原文")
         }
     }
+    // ONNX Runtime destroys static state during exit(); a model load or decode
+    // still running on the worker would crash, so let it finish first.
+    func waitForRecognizer() { worker.sync {} }
     func shutdown() {
-        preparationTask?.cancel(); cancel(); corrector.shutdown()
+        preparationTask?.cancel(); cancel(); corrector.shutdown(); waitForRecognizer()
     }
     func saveSettings() {
         do { try settings.save() } catch { detail = "保存设置失败：\(error.localizedDescription)" }

@@ -1,6 +1,6 @@
 import Foundation
 
-// The 常用词 list was only reaching Whisper's decoder. The same homophone problem
+// The 常用词 list guides voice correction. The same homophone problem
 // exists when those words are typed, so the list is also written out as Rime's
 // custom phrase table. luna_pinyin already runs a `custom_phrase` table
 // translator over <user dir>/custom_phrase.txt with initial_quality 1, and reads

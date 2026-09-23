@@ -1,8 +1,9 @@
 # Third-party components
 
 - librime 1.17.0 (33e7814), BSD-3-Clause: https://github.com/rime/librime
-- whisper.cpp 1.7.5, MIT: https://github.com/ggml-org/whisper.cpp
-- Whisper small multilingual Q5_1 weights, MIT: https://huggingface.co/ggerganov/whisper.cpp
+- sherpa-onnx 1.13.8, Apache-2.0: https://github.com/k2-fsa/sherpa-onnx — shipped as `libsherpa-onnx-c-api.dylib` in the voice helper.
+- ONNX Runtime 1.28.2 (from the sherpa-onnx release), MIT: https://github.com/microsoft/onnxruntime
+- SenseVoice Small weights, sherpa-onnx INT8 export `sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17`, FunASR Model Open Source License 1.1 (source attribution and the model name must be retained): https://github.com/FunAudioLLM/SenseVoice
 - Rime luna-pinyin / prelude: https://github.com/rime (individual license files included in the application). Luna supplies the base schema and the personal-phrase pronunciation lookup; it is no longer the active system dictionary.
 - Rime Ice dictionaries, **GPL-3.0**: https://github.com/iDvel/rime-ice . The bundled `cn_dicts` data is unchanged upstream data, imported through Qingyan's own dictionary header. Upstream `LICENSE` and `others/docs/Credits.md` are included in the application. The Tencent AI Lab word-vector source is attributed under **CC BY 3.0** in those credits: https://ai.tencent.com/ailab/nlp/en/download.html .
 - librime-octagram (ec52e48 / dfcc151 build), **GPL-3.0**: https://github.com/lotem/librime-octagram — shipped as `Contents/Frameworks/rime-plugins/librime-octagram.dylib` and loaded at runtime.

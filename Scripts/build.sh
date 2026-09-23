@@ -6,9 +6,11 @@ python3 Scripts/bootstrap.py --verify-only
 BUILD="$ROOT/build"
 APP="$BUILD/LocalInput.app"
 VOICE="$APP/Contents/Helpers/LocalInput Voice.app"
-FRAMEWORK="$ROOT/Vendor/whisper/build-apple/whisper.xcframework/macos-arm64_x86_64"
+# The speech runtime and model are generated output too; clear them so a
+# replaced engine leaves nothing stale in the helper.
+rm -rf "$VOICE/Contents/Frameworks" "$VOICE/Contents/Resources/Models"
 mkdir -p "$BUILD/module-cache" "$APP/Contents/"{MacOS,Resources/Rime,Frameworks,Helpers} \
-  "$VOICE/Contents/"{MacOS,Resources/Models,Frameworks}
+  "$VOICE/Contents/"{MacOS,Resources/Models/sense-voice,Frameworks}
 SDK="$(xcrun --sdk macosx --show-sdk-path)"
 export CLANG_MODULE_CACHE_PATH="$BUILD/module-cache"
 export SWIFT_MODULECACHE_PATH="$BUILD/module-cache"
@@ -19,8 +21,8 @@ cp Vendor/rime/dist/lib/librime.1.17.0.dylib "$APP/Contents/Frameworks/librime.1
 # librime discovers plugins in a "rime-plugins" directory beside its own dylib.
 mkdir -p "$APP/Contents/Frameworks/rime-plugins"
 cp Vendor/rime/dist/lib/rime-plugins/librime-octagram.dylib "$APP/Contents/Frameworks/rime-plugins/"
-ditto "$FRAMEWORK/whisper.framework" "$VOICE/Contents/Frameworks/whisper.framework"
-cp Vendor/Models/ggml-small-q5_1.bin "$VOICE/Contents/Resources/Models/"
+cp Vendor/sherpa-onnx/lib/libsherpa-onnx-c-api.dylib Vendor/sherpa-onnx/lib/libonnxruntime.dylib "$VOICE/Contents/Frameworks/"
+cp Vendor/sense-voice/model.int8.onnx Vendor/sense-voice/tokens.txt "$VOICE/Contents/Resources/Models/sense-voice/"
 # Rime resources are generated output. Clear stale dictionaries/models when
 # switching the bundled vocabulary; personal user data lives elsewhere.
 rm -rf "$APP/Contents/Resources/Rime"
@@ -39,9 +41,9 @@ patch:
   menu/page_size: 5
   switcher/hotkeys: []
 YAML
+rm -rf "$APP/Contents/Resources/Licenses"
 mkdir -p "$APP/Contents/Resources/Licenses"
 cp Vendor/RIME-LICENSE "$APP/Contents/Resources/Licenses/librime.txt"
-cp Vendor/WHISPER-LICENSE "$APP/Contents/Resources/Licenses/whisper.cpp.txt"
 for repo in luna-pinyin prelude rime-ice; do
   if test -f "Vendor/$repo/LICENSE"; then cp "Vendor/$repo/LICENSE" "$APP/Contents/Resources/Licenses/$repo.txt"; fi
 done
@@ -59,8 +61,9 @@ xcrun swiftc -swift-version 5 -O -target arm64-apple-macos14.0 \
   -Xlinker -rpath -Xlinker '@executable_path/../Frameworks' -o "$APP/Contents/MacOS/LocalInput"
 xcrun swiftc -swift-version 5 -O -target arm64-apple-macos14.0 \
   -module-cache-path "$BUILD/module-cache" -module-name LocalInputVoice \
+  -import-objc-header Sources/Bridge/SherpaBridge.h -I Vendor/sherpa-onnx/include \
   Sources/Shared/*.swift Sources/Companion/*.swift \
-  -F "$VOICE/Contents/Frameworks" -framework whisper -framework AppKit -framework SwiftUI -framework AVFoundation \
+  -L "$VOICE/Contents/Frameworks" -l sherpa-onnx-c-api -framework AppKit -framework SwiftUI -framework AVFoundation \
   -Xlinker -rpath -Xlinker '@executable_path/../Frameworks' -o "$VOICE/Contents/MacOS/LocalInputVoice"
 rm -rf "$BUILD/deploy-user"
 mkdir -p "$BUILD/deploy-user"
@@ -69,7 +72,7 @@ ditto "$BUILD/deploy-user/build" "$APP/Contents/Resources/Rime/build"
 xcrun swift Scripts/icon.swift "$APP/Contents/Resources/InputIcon-Qingyan.tiff" "$BUILD/icon-preview-0.1.16.png"
 codesign --force --sign - --timestamp=none "$APP/Contents/Frameworks/librime.1.dylib"
 codesign --force --sign - --timestamp=none "$APP/Contents/Frameworks/rime-plugins/librime-octagram.dylib"
-codesign --force --sign - --timestamp=none "$VOICE/Contents/Frameworks/whisper.framework"
+codesign --force --sign - --timestamp=none "$VOICE/Contents/Frameworks/"*.dylib
 codesign --force --sign - --timestamp=none "$VOICE"
 codesign --force --sign - --timestamp=none "$APP"
 codesign --verify --deep --strict "$APP"

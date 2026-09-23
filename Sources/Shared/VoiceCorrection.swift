@@ -13,7 +13,6 @@ enum VoiceVocabulary {
             return term
         }.prefix(40).map { $0 }
     }
-    static func prompt(_ input: String) -> String { normalize(input).joined(separator: "、") }
 }
 
 // A second, deterministic boundary: the model is allowed only small edits.

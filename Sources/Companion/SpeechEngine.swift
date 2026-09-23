@@ -1,5 +1,4 @@
 import AVFoundation
-import whisper
 
 enum SpeechError: LocalizedError {
     case message(String)
@@ -99,91 +98,54 @@ final class MicrophoneCapture {
 }
 
 // Confined to one serial worker queue. Never called on the input method's thread.
+// SenseVoice is non-autoregressive: each decode runs the whole snapshot in one
+// pass, so live previews and the final result share the same path.
 final class SpeechEngine {
-    private var context: OpaquePointer?
-    private var partialState: OpaquePointer?
-    private var loadedPath = ""
-    deinit {
-        if let partialState { whisper_free_state(partialState) }
-        if let context { whisper_free(context) }
-    }
-    func prepare(model: String) throws {
-        if context == nil || loadedPath != model {
-            if let partialState { whisper_free_state(partialState) }; partialState = nil
-            if let context { whisper_free(context) }; context = nil
-            var config = whisper_context_default_params()
-            config.use_gpu = true
-            context = model.withCString { whisper_init_from_file_with_params($0, config) }
-            guard context != nil else { throw SpeechError.message("无法加载模型，请在设置中选择有效的多语言模型") }
-            loadedPath = model
+    private var recognizer: OpaquePointer?
+    private var loadedKey = ""
+    deinit { if let recognizer { SherpaOnnxDestroyOfflineRecognizer(recognizer) } }
+    // The language is fixed per recognizer; switching it reloads the model.
+    func prepare(model: String, language: String) throws {
+        let key = model + "\n" + language
+        guard recognizer == nil || loadedKey != key else { return }
+        if let recognizer { SherpaOnnxDestroyOfflineRecognizer(recognizer) }; recognizer = nil
+        let tokens = URL(fileURLWithPath: model).deletingLastPathComponent().appendingPathComponent("tokens.txt").path
+        guard FileManager.default.fileExists(atPath: model), FileManager.default.fileExists(atPath: tokens) else {
+            throw SpeechError.message("找不到离线模型，请在设置中选择 SenseVoice 模型（同目录需有 tokens.txt）")
         }
-        // Share model weights but isolate the preview decoder's shortened context
-        // from the final decoder (including automatic language detection).
-        if partialState == nil, let context {
-            partialState = whisper_init_state(context)
-            guard partialState != nil else { throw SpeechError.message("无法准备实时识别状态") }
-        }
+        // The C API copies every string while building its config.
+        let strings = [model, tokens, language, "cpu", "greedy_search"].map { strdup($0)! }
+        defer { strings.forEach { free($0) } }
+        var config = SherpaOnnxOfflineRecognizerConfig()
+        config.feat_config.sample_rate = 16000
+        config.feat_config.feature_dim = 80
+        config.model_config.sense_voice.model = UnsafePointer(strings[0])
+        config.model_config.tokens = UnsafePointer(strings[1])
+        config.model_config.sense_voice.language = UnsafePointer(strings[2])
+        // Inverse text normalization adds punctuation and writes numbers as digits.
+        config.model_config.sense_voice.use_itn = 1
+        config.model_config.provider = UnsafePointer(strings[3])
+        config.model_config.num_threads = Int32(min(6, max(1, ProcessInfo.processInfo.activeProcessorCount - 2)))
+        config.decoding_method = UnsafePointer(strings[4])
+        recognizer = SherpaOnnxCreateOfflineRecognizer(&config)
+        guard recognizer != nil else { throw SpeechError.message("无法加载模型，请在设置中选择有效的 SenseVoice 模型") }
+        loadedKey = key
     }
-    func transcribe(_ samples: [Float], model: String, language: String, cancellation: CancellationFlag, partial: Bool = false, vocabulary: String = "") throws -> String {
+    func transcribe(_ samples: [Float], model: String, language: String, cancellation: CancellationFlag) throws -> String {
         guard samples.count >= 4000 else { throw SpeechError.message("录音太短，请说完一句话后再停止") }
         let rms = sqrt(samples.reduce(0.0) { $0 + Double($1 * $1) } / Double(samples.count))
         guard rms > 0.002 else { throw SpeechError.message("没有检测到清晰语音，请检查麦克风") }
         if cancellation.cancelled { throw SpeechError.message("已取消") }
-        try prepare(model: model)
-        guard let context else { throw SpeechError.message("模型未就绪") }
-        var params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY)
-        params.n_threads = Int32(min(6, max(1, ProcessInfo.processInfo.activeProcessorCount - 2)))
-        params.translate = false
-        params.no_context = true
-        params.no_timestamps = true
-        params.print_realtime = false
-        params.print_progress = false
-        params.print_timestamps = false
-        params.print_special = false
-        params.suppress_blank = true
-        params.suppress_nst = true
-        if partial {
-            // Match the provisional encoder context to available audio, with a one-second
-            // margin, instead of encoding the default 30-second context every update.
-            let frames = (samples.count + 319) / 320 + 50
-            params.audio_ctx = min(whisper_model_n_audio_ctx(context), Int32(max(512, ((frames + 63) / 64) * 64)))
-            params.single_segment = samples.count <= 480000
-            params.max_tokens = samples.count < 128000 ? Int32(max(24, (samples.count / 16000 + 1) * 12)) : 0
-        }
-        params.abort_callback_user_data = Unmanaged.passUnretained(cancellation).toOpaque()
-        params.abort_callback = { pointer in
-            guard let pointer else { return false }
-            return Unmanaged<CancellationFlag>.fromOpaque(pointer).takeUnretainedValue().cancelled
-        }
-        // whisper.cpp 1.7.5 skips input shorter than one second. Pad only the
-        // provisional decode; captured audio and final transcription stay untouched.
-        let decodeSamples = partial && samples.count < 17600 ?
-            samples + [Float](repeating: 0, count: 17600 - samples.count) : samples
-        let prompt = vocabulary
-        let result = prompt.withCString { hint in
-        language.withCString { lang in
-            params.initial_prompt = prompt.isEmpty ? nil : hint
-            params.language = lang
-            return decodeSamples.withUnsafeBufferPointer {
-                if partial {
-                    return whisper_full_with_state(context, partialState, params, $0.baseAddress, Int32($0.count))
-                }
-                return whisper_full(context, params, $0.baseAddress, Int32($0.count))
-            }
-        }
-        }
+        try prepare(model: model, language: language)
+        guard let recognizer, let stream = SherpaOnnxCreateOfflineStream(recognizer) else { throw SpeechError.message("模型未就绪") }
+        defer { SherpaOnnxDestroyOfflineStream(stream) }
+        samples.withUnsafeBufferPointer { SherpaOnnxAcceptWaveformOffline(stream, 16000, $0.baseAddress, Int32($0.count)) }
+        // A decode cannot be interrupted, but it is short; a cancelled result is discarded.
+        SherpaOnnxDecodeOfflineStream(recognizer, stream)
         if cancellation.cancelled { throw SpeechError.message("已取消") }
-        guard result == 0 else { throw SpeechError.message("本地识别失败（\(result)）") }
-        var text = ""
-        let segmentCount = partial ? whisper_full_n_segments_from_state(partialState) : whisper_full_n_segments(context)
-        for i in 0..<segmentCount {
-            // A silent segment must not become hallucinated input.
-            let noSpeech = partial ? whisper_full_get_segment_no_speech_prob_from_state(partialState, i) :
-                whisper_full_get_segment_no_speech_prob(context, i)
-            if noSpeech > 0.6 { continue }
-            let segment = partial ? whisper_full_get_segment_text_from_state(partialState, i) : whisper_full_get_segment_text(context, i)
-            if let segment { text += String(cString: segment) }
-        }
+        guard let result = SherpaOnnxGetOfflineStreamResult(stream) else { throw SpeechError.message("本地识别失败") }
+        defer { SherpaOnnxDestroyOfflineRecognizerResult(result) }
+        var text = result.pointee.text.map { String(cString: $0) } ?? ""
         text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         text = text.applyingTransform(StringTransform("Traditional-Simplified"), reverse: false) ?? text
         guard !text.isEmpty else { throw SpeechError.message("未识别到语音，请再试一次") }

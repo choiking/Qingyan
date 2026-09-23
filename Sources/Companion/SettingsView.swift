@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @ObservedObject var service: VoiceService
@@ -80,13 +81,15 @@ struct SettingsView: View {
                         Text("\(Int(service.settings.fontSize))").monospacedDigit().frame(width: 24)
                     }
                     HStack {
-                        Text(service.settings.modelPath.isEmpty ? "离线模型：Small · 多语言 · Q5" : "模型：\(service.modelURL.lastPathComponent)")
+                        Text(service.settings.modelPath.isEmpty ? "离线模型：SenseVoice Small · 中英日韩粤 · INT8" : "模型：\(service.modelURL.lastPathComponent)")
                             .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                         Spacer()
                         Button("选择…") {
                             let panel = NSOpenPanel()
                             panel.canChooseDirectories = false
                             panel.allowsMultipleSelection = false
+                            // SenseVoice ONNX; tokens.txt must sit beside it.
+                            panel.allowedContentTypes = UTType(filenameExtension: "onnx").map { [$0] } ?? []
                             if panel.runModal() == .OK, let url = panel.url {
                                 service.settings.modelPath = url.path; service.saveSettings()
                             }

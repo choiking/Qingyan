@@ -7,7 +7,7 @@ if CommandLine.arguments.count >= 4 && CommandLine.arguments[1] == "--transcribe
         let samples = try PCM.read(URL(fileURLWithPath: CommandLine.arguments[2]))
         let start = Date()
         let language = CommandLine.arguments.count > 4 ? CommandLine.arguments[4] : "auto"
-        let text = try SpeechEngine().transcribe(samples, model: CommandLine.arguments[3], language: language, cancellation: CancellationFlag(), vocabulary: CommandLine.arguments.count > 5 ? CommandLine.arguments[5] : "")
+        let text = try SpeechEngine().transcribe(samples, model: CommandLine.arguments[3], language: language, cancellation: CancellationFlag())
         print(text)
         fputs(String(format: "Local transcription: %.2fs audio, %.2fs processing\n", Double(samples.count) / 16000, Date().timeIntervalSince(start)), stderr)
         exit(0)
@@ -37,6 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 renderer.scale = 2
                 guard let cgImage = renderer.cgImage,
                       let data = NSBitmapImageRep(cgImage: cgImage).representation(using: .png, properties: [:]) else { exit(1) }
+                service.waitForRecognizer()
                 do { try data.write(to: URL(fileURLWithPath: CommandLine.arguments[2])); exit(0) }
                 catch { fputs("\(error)\n", stderr); exit(1) }
             }
@@ -48,6 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                       let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { exit(1) }
                 view.layoutSubtreeIfNeeded()
                 view.cacheDisplay(in: view.bounds, to: bitmap)
+                self.service.waitForRecognizer()
                 do {
                     try bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: CommandLine.arguments[2]))
                     exit(0)

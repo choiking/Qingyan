@@ -21,7 +21,7 @@ macOS 原生中文 / 英文 / 离线语音输入法，当前为 **0.1.16 开发�
 - 空格选择当前候选、1–5 数字选词、鼠标选择、上下键选择、减号 / 等号或 Page Up / Page Down 翻页。
 - 「常用词」列表同时用于打字：自动按字推导拼音写成 Rime 自定义短语表，专有名词排在词库候选之前。
 - 英文直接输入、大小写和常用应用快捷键透传。
-- 独立语音辅助进程；内置 Whisper Small 多语言 Q5_1 模型，无需 API key。
+- 独立语音辅助进程；内置 SenseVoice Small（中英日韩粤）INT8 模型，由 sherpa-onnx 在本机运行，无需 API key。
 - 自动语言检测，以及手动中文 / 英文模式。中文转写统一为简体。
 - 按住说话时在输入框内显示临时转写，后续识别替换同一段文字，松开后校正并定稿。Esc 取消并撤回仍由输入法持有的临时文字；原有选中文字会恢复。
 - 录音达到约 0.8 秒后开始尝试识别，后续约每 0.35 秒尝试更新，每次最多运行一个识别任务；识别完成后立即通知输入法显示；切换到轻言会在后台提前加载本地模型（不会启动麦克风）；首次模型加载、长录音或机器繁忙仍会增加显示延迟，不保证逐字即时输出。很短的片段可能暂时没有结果；主要说中文时可将“语音语言”设为“中文”，省去自动判断语言的耗时。
@@ -63,8 +63,8 @@ macOS 原生中文 / 英文 / 离线语音输入法，当前为 **0.1.16 开发�
 
 打开设置的 **语音纠错** 标签页：
 
-- **常用词提示**：每行填写一个专有名词，自动保存。最多 40 个词，每词最多 40 字、合计 400 字。提示直接送入 Whisper 解码，不做强制替换。
-- **同时用于打字**：同一份列表会写成 Rime 自定义短语表。每个词的拼音按单字读音推导，多音字取词库标注的高频读音，最多保留 4 种拼法。含字母、数字或表情的词条（如 `Qingyan`）不生成拼法，只用于语音；超过 12 个字的词条也跳过。
+- **常用词提示**：每行填写一个专有名词，自动保存。最多 40 个词，每词最多 40 字、合计 400 字。SenseVoice 不接受词汇提示，列表不会送入识别；开启下方本地 AI 轻度纠错后，纠错会参考这些词。不做强制替换。
+- **同时用于打字**：同一份列表会写成 Rime 自定义短语表。每个词的拼音按单字读音推导，多音字取词库标注的高频读音，最多保留 4 种拼法。含字母、数字或表情的词条（如 `Qingyan`）不生成拼法，只用于语音纠错；超过 12 个字的词条也跳过。
 - **生效时机**：改完列表切回输入框即生效，不需要重新部署或重启；切换时会重建输入会话，正在输入的拼音请先上屏。
 - **本地 AI 轻度纠错**：可选开关。实时显示仍走语音识别；松开后才用本地模型检查一次错字和标点。目标是不润色、不扩写，但不能保证完全不改错。
 - **等待与回退**：纠错最多等待 4 秒，长于 800 字、服务不可用、超时或改动不满足保护规则时直接保留原文。检测数字、部分单位、否定词和词库中已正确出现的名称，并限制编辑幅度；这些规则并不等于语义正确性保证。
@@ -77,7 +77,7 @@ macOS 原生中文 / 英文 / 离线语音输入法，当前为 **0.1.16 开发�
 
 0.1.3 修复了旧版点击授权时退出的问题：macOS 将嵌套语音辅助进程的麦克风请求归属到外层输入法，旧版外层应用缺少用途声明。现已同时在两个应用中声明，并在构建时检查。若之前点过拒绝，设置中的按钮会显示「打开麦克风权限设置」。
 
-- 语音识别及语音纠错在本机进行；Whisper 模型和拼音词库随应用提供。可选的语音纠错功能使用本机 Ollama 和另行下载的 Qwen3 4B Instruct（约 2.5GB），仅初次下载权重需要联网。单独开启 Jev 选词后，拼音输入的有限上下文会发送到 TypeSafe，详见上节。
+- 语音识别及语音纠错在本机进行；SenseVoice 模型和拼音词库随应用提供。可选的语音纠错功能使用本机 Ollama 和另行下载的 Qwen3 4B Instruct（约 2.5GB），仅初次下载权重需要联网。单独开启 Jev 选词后，拼音输入的有限上下文会发送到 TypeSafe，详见上节。
 - 原始录音只在内存中处理，不保存为音频文件。
 - 输入法与语音辅助进程通过当前用户专用目录交换状态与临时转写。目录权限 0700，文件权限 0600。
 - 转写上屏或取消后清理临时会话文件；异常退出留下的旧文件会在之后启动时清理。
@@ -141,7 +141,7 @@ bash Scripts/uninstall.sh
 - `Tests`：真实词库与状态回归测试。
 - `Scripts`：下载、构建、安装、卸载、输入源注册。
 
-上游：[InputMethodKit](https://developer.apple.com/documentation/inputmethodkit)、[librime](https://github.com/rime/librime)、[librime-octagram](https://github.com/lotem/librime-octagram)、[rime-octagram-data](https://github.com/lotem/rime-octagram-data)、[whisper.cpp](https://github.com/ggml-org/whisper.cpp)。第三方声明见 `THIRD_PARTY.md` 和应用内 `Contents/Resources/Licenses`。
+上游：[InputMethodKit](https://developer.apple.com/documentation/inputmethodkit)、[librime](https://github.com/rime/librime)、[librime-octagram](https://github.com/lotem/librime-octagram)、[rime-octagram-data](https://github.com/lotem/rime-octagram-data)、[sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)、[SenseVoice](https://github.com/FunAudioLLM/SenseVoice)。第三方声明见 `THIRD_PARTY.md` 和应用内 `Contents/Resources/Licenses`。
 
 ## 许可
 
