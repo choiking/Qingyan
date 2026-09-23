@@ -10,6 +10,7 @@ struct SettingsView: View {
             general.tabItem { Text("输入与语音") }
             JevSettingsView(service: service).tabItem { Text("Jev 选词") }
             CorrectionSettingsView(service: service).tabItem { Text("语音纠错") }
+            WordStatsView(service: service).tabItem { Text("用词统计") }
         }.padding(8).frame(width: 540, height: 700)
     }
     private var general: some View {

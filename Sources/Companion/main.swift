@@ -28,7 +28,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.isReleasedWhenClosed = false
         window.contentView = NSHostingView(rootView: SettingsView(service: service))
         window.center()
-        if CommandLine.arguments.count == 3, ["--render-settings", "--render-correction"].contains(CommandLine.arguments[1]) {
+        if CommandLine.arguments.count == 3, ["--render-settings", "--render-correction", "--render-word-stats"].contains(CommandLine.arguments[1]) {
+            if CommandLine.arguments[1] == "--render-word-stats" {
+                window.contentView = NSHostingView(rootView: WordStatsView(service: service).frame(width: 540, height: 700))
+            }
             if CommandLine.arguments[1] == "--render-correction" {
                 // Export SwiftUI directly; NSView cacheDisplay omits its composited layers on some macOS versions.
                 // Native editor/toggle controls use value representations because ImageRenderer cannot draw their AppKit views.

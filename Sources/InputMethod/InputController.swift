@@ -221,7 +221,10 @@ final class LocalInputController: IMKInputController {
     private func refresh() {
         cancelJev()
         let commit = engine.takeCommit()
-        if !commit.isEmpty { client()?.insertText(commit, replacementRange: replacement); hasMarkedText = false }
+        if !commit.isEmpty {
+            client()?.insertText(commit, replacementRange: replacement); hasMarkedText = false
+            recordWords(commit, .typed)
+        }
         let snapshot = engine.snapshot()
         let preedit = snapshot["preedit"] as? String ?? ""
         if !preedit.isEmpty || hasMarkedText {
@@ -363,13 +366,18 @@ final class LocalInputController: IMKInputController {
             english = true
             hasMarkedText = false
             panel.orderOut(nil)
-            if !raw.isEmpty { client()?.insertText(raw, replacementRange: replacement) }
+            if !raw.isEmpty { client()?.insertText(raw, replacementRange: replacement); recordWords(raw, .typed) }
         } else {
             english = false
             panel.orderOut(nil)
         }
     }
     @objc private func toggleMode(_ sender: Any?) { switchTypingMode() }
+    private func recordWords(_ text: String, _ source: WordStats.Source) {
+        let settings = Settings.load()
+        guard settings.wordStatsEnabled else { return }
+        WordStatsRecorder.shared.record(text, source: source, vocabulary: settings.voiceVocabulary)
+    }
     @objc private func openSettings(_ sender: Any?) { launchCompanion(activate: true) }
     private func launchCompanion(activate: Bool, completion: ((Error?) -> Void)? = nil) {
         let url = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/LocalInput Voice.app")
@@ -500,7 +508,9 @@ final class LocalInputController: IMKInputController {
         // Detach and invalidate the async session before the native client call.
         voiceComposition = nil
         cancelVoice()
-        if composition.commit(text, client: adapter), let original, original != text, start != NSNotFound {
+        guard composition.commit(text, client: adapter) else { return }
+        recordWords(text, .voice)
+        if let original, original != text, start != NSNotFound {
             let undo = VoiceCorrectionUndo(original: original, corrected: text,
                 range: NSRange(location: start, length: text.utf16.count), created: Date())
             if undo.replacementRange(in: adapter) != nil {

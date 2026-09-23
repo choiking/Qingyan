@@ -43,9 +43,10 @@ struct Settings: Codable {
     var voiceVocabulary = "轻言\nQingyan"
     var correctionEnabled = false
     var jevEnabled = false
+    var wordStatsEnabled = false
     var voiceShortcut = VoiceShortcut.defaultShortcut
     init() {}
-    private enum CodingKeys: String, CodingKey { case language, fontSize, shiftToggle, modelPath, voiceShortcut, voiceVocabulary, correctionEnabled, jevEnabled }
+    private enum CodingKeys: String, CodingKey { case language, fontSize, shiftToggle, modelPath, voiceShortcut, voiceVocabulary, correctionEnabled, jevEnabled, wordStatsEnabled }
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         language = try values.decodeIfPresent(String.self, forKey: .language) ?? "auto"
@@ -55,6 +56,7 @@ struct Settings: Codable {
         voiceVocabulary = try values.decodeIfPresent(String.self, forKey: .voiceVocabulary) ?? "轻言\nQingyan"
         correctionEnabled = try values.decodeIfPresent(Bool.self, forKey: .correctionEnabled) ?? false
         jevEnabled = try values.decodeIfPresent(Bool.self, forKey: .jevEnabled) ?? false
+        wordStatsEnabled = try values.decodeIfPresent(Bool.self, forKey: .wordStatsEnabled) ?? false
         // Old settings have no shortcut. A damaged shortcut must not reset the user's other preferences.
         if let shortcut = try? values.decode(VoiceShortcut.self, forKey: .voiceShortcut), shortcut.validationError == nil {
             voiceShortcut = shortcut

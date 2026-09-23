@@ -1,4 +1,11 @@
-# Validation — updated 2026-09-18
+# Validation — updated 2026-09-23
+
+## Word statistics (2026-09-23)
+
+- Added opt-in per-word counts for committed text: Rime commits and Shift raw-letter commits count as typed; finalized voice commits count as voice. Stored in `word-stats.json` (0600) as per-word typed/voice totals, last-use date and daily totals only. Writes are batched about 2 s after a commit and done off the main thread; each flush re-reads the file so clearing from settings is not undone by in-memory state.
+- Segmentation: picked candidates of 1–3 Han characters stay whole (NaturalLanguage splits 显眼包 into 显眼/包); longer commits and voice use `NLTokenizer`, with 常用词 rejoined. Numbers, emoji and punctuation are dropped. Characters typed directly in English mode never reach the input method and are not counted.
+- `Tests/WordStatsTests.swift`: segmentation, picked words, vocabulary merge, per-source/daily counts, batched writes, file permissions, clear-then-record and settings migration (missing key = off). Full `Scripts/build.sh` and `Scripts/test.sh` passed. Logs: `build/word-stats-build.log`, `build/word-stats-tests.log`.
+- Rendered the new tab with sample data under a scratch `CFFIXED_USER_HOME` (`--render-word-stats`) and inspected it. Recording from real typing in external apps was not automated here.
 
 ## 0.1.16 — 轻言输入法 rebrand (2026-09-18)
 
