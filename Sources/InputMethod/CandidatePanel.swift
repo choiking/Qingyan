@@ -37,6 +37,8 @@ final class CandidatePanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
     func show(title: String, candidates: [String] = [], selected: Int = -1,
+              scores: [Double]? = nil,
+              partialRows: Set<Int> = [],
               detail: String, anchor: NSRect) {
         stack.arrangedSubviews.forEach { stack.removeArrangedSubview($0); $0.removeFromSuperview() }
         let heading = NSTextField(wrappingLabelWithString: title)
@@ -45,7 +47,9 @@ final class CandidatePanel: NSPanel {
         heading.preferredMaxLayoutWidth = 420
         stack.addArrangedSubview(heading)
         for (index, text) in candidates.enumerated() {
-            let button = NSButton(title: "\(index + 1)  \(text)", target: self, action: #selector(selectCandidate(_:)))
+            let badge = scores.flatMap { $0.indices.contains(index) ? "  ✦ Jev \(String(format: "%.1f", $0[index]))" : nil } ?? ""
+            let coverage = partialRows.contains(index) ? "（部分）" : ""
+            let button = NSButton(title: "\(index + 1)  \(text)\(coverage)\(badge)", target: self, action: #selector(selectCandidate(_:)))
             button.tag = index
             button.isBordered = false
             button.alignment = .left

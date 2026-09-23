@@ -117,4 +117,68 @@ static void fillTraits(RimeTraits *traits, NSString *shared, NSString *user) {
     RimeSessionId session = self.session;
     if (session) api->select_candidate_on_current_page(session, index);
 }
+- (NSArray<NSString *> *)candidatePool:(NSUInteger)limit {
+    RimeSessionId session = self.session;
+    NSMutableArray *result = [NSMutableArray array];
+    RimeCandidateListIterator iterator = {0};
+    if (session && api->candidate_list_begin(session, &iterator)) {
+        while (result.count < MIN(limit, 20) && api->candidate_list_next(&iterator)) {
+            [result addObject:@(iterator.candidate.text ?: "")];
+        }
+        api->candidate_list_end(&iterator);
+    }
+    return result;
+}
+- (void)selectGlobal:(NSUInteger)index {
+    RimeSessionId session = self.session;
+    if (session) api->select_candidate(session, index);
+}
+- (NSArray<NSDictionary *> *)candidateDetails:(NSUInteger)limit {
+    RimeSessionId session = self.session;
+    if (!session || !RIME_API_AVAILABLE(api, highlight_candidate)) return @[];
+    NSString *raw = [self rawInput];
+    NSData *rawBytes = [raw dataUsingEncoding:NSUTF8StringEncoding];
+    // Restrict this optimization to the end of the composition. Mid-input edits
+    // can involve additional segments beyond Rime's current conversion range.
+    if (!rawBytes.length || api->get_caret_pos(session) != rawBytes.length) return @[];
+    RIME_STRUCT(RimeContext, original);
+    if (!api->get_context(session, &original)) return @[];
+    size_t originalIndex = original.menu.page_no * original.menu.page_size + original.menu.highlighted_candidate_index;
+    api->free_context(&original);
+    NSArray<NSString *> *pool = [self candidatePool:limit];
+    NSMutableArray *result = [NSMutableArray array];
+    @try {
+        for (NSUInteger index = 0; index < pool.count; index++) {
+            // Highlight only: never select/commit to probe a candidate, which
+            // could learn words or alter the user's ongoing conversion.
+            api->highlight_candidate(session, index);
+            RIME_STRUCT(RimeContext, context);
+            if (!api->get_context(session, &context)) return @[];
+            NSString *remaining = nil;
+            if (context.composition.preedit && context.commit_text_preview &&
+                context.composition.sel_start >= 0 &&
+                context.composition.sel_start <= strlen(context.composition.preedit) &&
+                context.menu.page_no * context.menu.page_size + context.menu.highlighted_candidate_index == index) {
+                // librime 1.17 Composition::GetCommitText is converted-prefix +
+                // highlighted-candidate + untouched raw suffix. sel_start is a
+                // UTF-8 byte offset, not an NSString/UTF-16 character position.
+                NSString *prefix = [[NSString alloc] initWithBytes:context.composition.preedit
+                    length:context.composition.sel_start encoding:NSUTF8StringEncoding];
+                NSString *preview = @(context.commit_text_preview);
+                NSString *converted = [prefix stringByAppendingString:pool[index]];
+                if (prefix && [preview hasPrefix:converted]) {
+                    remaining = [preview substringFromIndex:converted.length];
+                }
+            }
+            api->free_context(&context);
+            if (!remaining || (remaining.length && ![raw hasSuffix:remaining])) return @[];
+            NSUInteger end = rawBytes.length - [remaining lengthOfBytesUsingEncoding:NSUTF8StringEncoding];
+            if (!end) return @[];
+            [result addObject:@{ @"text": pool[index], @"coverageEnd": @(end), @"remainingInput": remaining }];
+        }
+    } @finally {
+        api->highlight_candidate(session, originalIndex);
+    }
+    return result;
+}
 @end

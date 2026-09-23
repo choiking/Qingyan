@@ -41,6 +41,57 @@ int main(int argc, char **argv) { @autoreleasepool {
     type(engine, "hanyu");
     check([[engine snapshot][@"candidates"] containsObject:@"汉语"], @"simplified Chinese conversion");
     [engine clear];
+    type(engine, "youxiang");
+    NSArray<NSString *> *pool = [engine candidatePool:20];
+    check(pool.count <= 20 && pool.count > 5, @"Jev has a bounded pool beyond the visible page");
+    for (NSString *word in @[@"油箱", @"邮箱", @"又想"]) {
+        check([pool containsObject:word], [@"Jev candidate coverage: " stringByAppendingString:word]);
+    }
+    check([[engine snapshot][@"page"] intValue] == 0, @"pool lookup does not move Rime page");
+    NSDictionary *beforeCoverage = [engine snapshot];
+    NSArray<NSDictionary *> *details = [engine candidateDetails:20];
+    check(details.count == pool.count, @"every candidate has exact Rime coverage");
+    for (NSDictionary *item in details) {
+        NSString *word = item[@"text"];
+        if ([@[@"油箱", @"邮箱", @"又想"] containsObject:word]) {
+            check([item[@"coverageEnd"] intValue] == 8 && [item[@"remainingInput"] isEqual:@""], @"full youxiang candidates cover all input");
+        } else if ([@[@"游戏", @"有戏", @"右席"] containsObject:word]) {
+            check([item[@"coverageEnd"] intValue] == 5 && [item[@"remainingInput"] isEqual:@"ang"], @"youxi candidates leave ang unconverted");
+        } else if ([word isEqual:@"有"]) {
+            check([item[@"coverageEnd"] intValue] == 3 && [item[@"remainingInput"] isEqual:@"xiang"], @"single syllable candidate leaves xiang");
+        }
+    }
+    check([[engine snapshot] isEqual:beforeCoverage], @"coverage probing restores page, highlight, preedit and caret");
+    check([[engine takeCommit] isEqual:@""], @"coverage probing never commits or learns a choice");
+    check([[engine candidateDetails:20] isEqual:details], @"repeated coverage reads are stable");
+    NSUInteger promoted = [pool indexOfObject:@"又想"];
+    [engine selectGlobal:promoted];
+    check([[engine takeCommit] isEqual:@"又想"], @"promoted Rime index commits the displayed word");
+    [engine clear];
+    type(engine, "youxiang");
+    NSArray *partialPool = [engine candidatePool:20];
+    [engine selectGlobal:[partialPool indexOfObject:@"有"]];
+    NSDictionary *partialBefore = [engine snapshot];
+    NSArray *partialDetails = [engine candidateDetails:20];
+    check(partialDetails.count > 0, @"coverage works after a partial candidate has been selected");
+    for (NSDictionary *item in partialDetails) {
+        check([item[@"coverageEnd"] intValue] > 3 && [item[@"coverageEnd"] intValue] <= 8, @"coverage offsets remain relative to raw input after selected Chinese prefix");
+    }
+    check([[engine snapshot] isEqual:partialBefore] && [[engine takeCommit] isEqual:@""], @"reading coverage preserves selected Chinese prefix");
+    [engine clear];
+    type(engine, "you'xiang");
+    NSArray *apostropheDetails = [engine candidateDetails:20];
+    check(apostropheDetails.count > 0, @"apostrophe-delimited spelling supports coverage");
+    for (NSDictionary *item in apostropheDetails) {
+        if ([item[@"text"] isEqual:@"油箱"]) check([item[@"coverageEnd"] intValue] == 9, @"coverage counts actual raw input including delimiter");
+    }
+    [engine process:0xff56 modifiers:0];
+    NSDictionary *pageBefore = [engine snapshot];
+    check([engine candidateDetails:20].count > 0 && [[engine snapshot] isEqual:pageBefore], @"coverage lookup restores a nonzero page and highlight");
+    [engine process:0xff51 modifiers:0];
+    NSDictionary *caretBefore = [engine snapshot];
+    check([engine candidateDetails:20].count == 0 && [[engine snapshot] isEqual:caretBefore], @"mid-input editing conservatively keeps native ranking");
+    [engine clear];
     // These entries come from the pinned upstream Ice dictionaries, not an
     // application-maintained hotword list. Exercise the compiled translator.
     NSDictionary *modernWords = @{

@@ -16,5 +16,10 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)clear;
 - (void)commit;
 - (void)select:(NSUInteger)index;
+- (NSArray<NSString *> *)candidatePool:(NSUInteger)limit;
+// Each item: text, coverageEnd (byte offset in raw input), remainingInput.
+// Returns an empty array when exact coverage cannot be established.
+- (NSArray<NSDictionary *> *)candidateDetails:(NSUInteger)limit;
+- (void)selectGlobal:(NSUInteger)index;
 @end
 NS_ASSUME_NONNULL_END

@@ -28,11 +28,19 @@ final class LocalInputController: IMKInputController {
     private var voiceStarted = Date()
     private var activeVoiceShortcut: VoiceShortcut?
     private var active = false
+    private var jevTask: Task<Void, Never>?
+    private var jevGeneration = UUID()
+    private var jevOrder: JevCandidateOrder?
+    private var jevPool: [String] = []
+    private var jevStatus = ""
+    private var manualCandidates = false
+    private var previousRaw = ""
     private static weak var activeController: LocalInputController?
     private static var companionPrepared = false
 
     override func activateServer(_ sender: Any!) {
         super.activateServer(sender)
+        Self.activeController?.cancelJev()
         Self.activeController?.panel.orderOut(nil)
         Self.activeController = self
         active = true
@@ -66,6 +74,7 @@ final class LocalInputController: IMKInputController {
         super.deactivateServer(sender)
     }
     override func inputControllerWillClose() {
+        cancelJev()
         cancelVoice()
         panel.orderOut(nil)
         super.inputControllerWillClose()
@@ -157,12 +166,60 @@ final class LocalInputController: IMKInputController {
         else if let chars = event.characters, chars.unicodeScalars.count == 1,
                 let scalar = chars.unicodeScalars.first, scalar.value < 128 { key = Int32(scalar.value) }
         else { commitComposition(sender); return false }
+        if let order = jevOrder {
+            if flags.intersection([.shift]).isEmpty, [45, 61, 0xff55, 0xff56].contains(key) {
+                let offset = [45, 0xff55].contains(key) ? -1 : 1
+                cancelJev(clearOrder: false)
+                manualCandidates = true
+                if jevOrder?.turnPage(offset) == true {
+                    showCandidates(engine.snapshot())
+                    return true
+                }
+                // The ranked pool is a permutation of the first 20 native items.
+                // Resume beyond it without duplicating or skipping any candidates.
+                let nativePage = engine.snapshot()["page"] as? Int ?? 0
+                if nativePage < order.page {
+                    for _ in nativePage..<order.page { _ = engine.process(0xff56, modifiers: 0) }
+                }
+                if engine.snapshot()["lastPage"] as? Bool == true {
+                    showCandidates(engine.snapshot())
+                    return true
+                }
+                cancelJev()
+            }
+            if flags.intersection([.shift]).isEmpty, key == 0xff52 || key == 0xff54 {
+                cancelJev(clearOrder: false)
+                manualCandidates = true
+                jevOrder?.move(key == 0xff52 ? -1 : 1)
+                showCandidates(engine.snapshot())
+                return true
+            }
+            let row = key == 32 ? order.selected : Int(key - 49)
+            if flags.intersection([.shift]).isEmpty, key == 32 || (49...53).contains(key), let index = order.engineIndex(for: row) {
+                cancelJev()
+                engine.selectGlobal(UInt(index))
+                refresh()
+                return true
+            }
+            // Rime implicitly accepts its highlight before punctuation. Accept the
+            // visible highlight first so punctuation cannot commit a different word.
+            if let scalar = UnicodeScalar(UInt32(max(0, key))),
+               CharacterSet.punctuationCharacters.contains(scalar), ![39, 45].contains(key),
+               let index = order.engineIndex(for: order.selected) {
+                cancelJev()
+                engine.selectGlobal(UInt(index))
+                refresh()
+            }
+        }
+        cancelJev()
+        if [0xff52, 0xff54, 0xff55, 0xff56, 45, 61, 0xff09].contains(key) { manualCandidates = true }
         let consumed = engine.process(key, modifiers: flags.contains(.shift) ? 1 : 0)
         refresh()
         return consumed
     }
 
     private func refresh() {
+        cancelJev()
         let commit = engine.takeCommit()
         if !commit.isEmpty { client()?.insertText(commit, replacementRange: replacement); hasMarkedText = false }
         let snapshot = engine.snapshot()
@@ -172,24 +229,114 @@ final class LocalInputController: IMKInputController {
             client()?.setMarkedText(preedit, selectionRange: NSRange(location: caret, length: 0), replacementRange: replacement)
         }
         hasMarkedText = !preedit.isEmpty
-        let choices = snapshot["candidates"] as? [String] ?? []
+        let raw = engine.rawInput()
+        if raw != previousRaw { manualCandidates = false; previousRaw = raw }
         guard !preedit.isEmpty else { panel.orderOut(nil); return }
+        scheduleJev(snapshot)
+        showCandidates(snapshot)
+    }
+    private func showCandidates(_ snapshot: [AnyHashable: Any]) {
+        let preedit = snapshot["preedit"] as? String ?? ""
+        let choices = jevOrder.map { order in order.indices.map { jevPool[$0] } }
+            ?? (snapshot["candidates"] as? [String] ?? [])
         panel.onSelect = { [weak self] index in
             guard let self, self.active else { return }
-            self.engine.select(UInt(index))
+            let global = self.jevOrder?.engineIndex(for: index)
+            self.cancelJev()
+            if let global { self.engine.selectGlobal(UInt(global)) }
+            else { self.engine.select(UInt(index)) }
             self.refresh()
         }
-        panel.show(title: preedit, candidates: choices, selected: snapshot["highlight"] as? Int ?? 0,
-            detail: "中 · 数字选词  ↑↓ 选择  − / = 翻页  Shift 英文", anchor: anchor())
+        panel.show(title: preedit, candidates: choices, selected: jevOrder?.selected ?? (snapshot["highlight"] as? Int ?? 0),
+            scores: jevOrder?.scores,
+            partialRows: jevOrder?.partialRows(inputLength: engine.rawInput().utf8.count) ?? [],
+            detail: (jevOrder.map { "完整匹配优先 · Jev 第 \($0.page + 1)/\($0.pageCount) 页 · " } ?? (jevStatus.isEmpty ? "中 · " : "\(jevStatus) · ")) +
+                "数字选词  ↑↓ 选择  − / = 翻页  Shift 英文", anchor: anchor())
+    }
+    private func cancelJev(clearOrder: Bool = true) {
+        jevGeneration = UUID()
+        jevTask?.cancel(); jevTask = nil
+        if clearOrder { jevOrder = nil; jevPool = []; jevStatus = "" }
+    }
+    private func precedingText(_ destination: IMKTextInput) -> String? {
+        let marked = destination.markedRange()
+        let selection = destination.selectedRange()
+        let end = marked.location != NSNotFound ? marked.location : selection.location
+        guard end != NSNotFound, end >= 0 else { return nil }
+        if end == 0 { return "" }
+        let range = NSRange(location: max(0, end - 128), length: min(128, end))
+        return destination.attributedSubstring(from: range)?.string
+    }
+    private func scheduleJev(_ snapshot: [AnyHashable: Any]) {
+        guard active, Settings.load().jevEnabled else { return }
+        guard !manualCandidates, snapshot["page"] as? Int == 0 else {
+            jevStatus = "Jev 暂停 · 手动选词"; return
+        }
+        guard let destination = client(), let prefix = precedingText(destination) else {
+            jevStatus = "Jev 未评分 · 此输入框不支持读取上下文"; return
+        }
+        let key = JevCredential.load()
+        guard !key.isEmpty else { jevStatus = "Jev 未评分 · 请配置 Key"; return }
+        let details = engine.candidateDetails(20)
+        let pool = details.compactMap { $0["text"] as? String }
+        let coverageEnds = details.compactMap { $0["coverageEnd"] as? Int }
+        guard !details.isEmpty, pool.count == details.count, coverageEnds.count == details.count else {
+            jevStatus = "Jev 未评分 · 当前拼音覆盖范围不可确认"; return
+        }
+        guard pool.count > 1 else { jevStatus = "Jev · 当前候选不足两项"; return }
+        jevStatus = prefix.isEmpty ? "Jev 评分中 · 暂无前文" : "Jev 评分中…"
+        let context = JevContext(precedingText: prefix, pinyin: engine.rawInput(),
+                                 preedit: snapshot["preedit"] as? String ?? "", candidates: pool, coverageEnds: coverageEnds)
+        let generation = jevGeneration
+        let identity = ObjectIdentifier(destination as AnyObject)
+        let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        let marked = destination.markedRange(), selection = destination.selectedRange()
+        let pageSize = (snapshot["candidates"] as? [String])?.count ?? 5
+        jevTask = Task { @MainActor [weak self] in
+            let isCurrent = { [weak self] in
+                guard let self, self.active, Self.activeController === self,
+                      self.jevGeneration == generation, !self.manualCandidates,
+                      Settings.load().jevEnabled, JevCredential.load() == key,
+                      NSWorkspace.shared.frontmostApplication?.processIdentifier == pid,
+                      let current = self.client(), ObjectIdentifier(current as AnyObject) == identity,
+                      current.markedRange() == marked, current.selectedRange() == selection,
+                      self.precedingText(current) == prefix, self.engine.rawInput() == context.pinyin,
+                      NSDictionary(dictionary: self.engine.snapshot()).isEqual(to: snapshot) else { return false }
+                return self.engine.candidatePool(20) == pool
+            }
+            do {
+                try await Task.sleep(nanoseconds: 180_000_000)
+                try Task.checkCancellation()
+                guard isCurrent() else { return }
+                let ranking = try await JevClient.shared.rank(context: context, apiKey: key)
+                try Task.checkCancellation()
+                guard let self, isCurrent() else { return }
+                self.jevPool = pool
+                self.jevOrder = JevCandidateOrder(ranking: ranking, pageSize: pageSize)
+                self.showCandidates(snapshot)
+            } catch {
+                // No retries on the keystroke path. Keep Rime immediately usable.
+                guard !Task.isCancelled, let self, isCurrent() else { return }
+                if let serviceError = error as? JevError, case .service(let code) = serviceError {
+                    self.jevStatus = "Jev HTTP \(code) · 使用本地候选"
+                } else if (error as? URLError)?.code == .timedOut {
+                    self.jevStatus = "Jev 超时 · 使用本地候选"
+                } else { self.jevStatus = "Jev 暂不可用 · 使用本地候选" }
+                self.showCandidates(snapshot)
+            }
+        }
     }
     private var replacement: NSRange { NSRange(location: NSNotFound, length: NSNotFound) }
     override func commitComposition(_ sender: Any!) {
+        let selected = jevOrder.flatMap { $0.engineIndex(for: $0.selected) }
+        cancelJev()
+        if let selected { engine.selectGlobal(UInt(selected)) }
         if !engine.rawInput().isEmpty {
             engine.commit()
             refresh()
-        }
+        } else if selected != nil { refresh() }
     }
-    override func hidePalettes() { panel.orderOut(nil) }
+    override func hidePalettes() { cancelJev(); panel.orderOut(nil) }
     private func anchor() -> NSRect {
         var rect = NSRect.zero
         if let c = client() { _ = c.attributes(forCharacterIndex: 0, lineHeightRectangle: &rect) }
@@ -209,6 +356,7 @@ final class LocalInputController: IMKInputController {
         return menu
     }
     private func switchTypingMode() {
+        cancelJev()
         if !english {
             let raw = engine.takeRawInput()
             // Clear engine/IME state before insertText, which can reenter the controller.

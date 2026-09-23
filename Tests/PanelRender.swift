@@ -6,8 +6,11 @@ import AppKit
         app.setActivationPolicy(.prohibited)
         app.appearance = NSAppearance(named: .aqua)
         let panel = CandidatePanel()
-        panel.show(title: "ni hao", candidates: ["你好", "拟好", "你号", "腻好", "逆号"], selected: 0,
-                   detail: "中 · 数字选词  ↑↓ 选择  − / = 翻页  Shift 英文",
+        let jev = CommandLine.arguments.contains("--jev")
+        panel.show(title: jev ? "you xiang" : "ni hao", candidates: jev ? ["油箱", "邮箱", "又想", "游戏", "有"] : ["你好", "拟好", "你号", "腻好", "逆号"], selected: 0,
+                   scores: jev ? [97.5, 62.0, 45.0, 60.0, 50.0] : nil,
+                   partialRows: jev ? [3, 4] : [],
+                   detail: "完整匹配优先 · 同组按 Jev 分数 · 数字选词  − / = 翻页",
                    anchor: NSRect(x: -10000, y: -10000, width: 1, height: 20))
         panel.orderOut(nil)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {

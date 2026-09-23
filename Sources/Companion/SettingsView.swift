@@ -7,6 +7,7 @@ struct SettingsView: View {
     var body: some View {
         TabView {
             general.tabItem { Text("输入与语音") }
+            JevSettingsView(service: service).tabItem { Text("Jev 选词") }
             CorrectionSettingsView(service: service).tabItem { Text("语音纠错") }
         }.padding(8).frame(width: 540, height: 700)
     }

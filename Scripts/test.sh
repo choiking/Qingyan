@@ -13,6 +13,8 @@ xcrun swiftc -swift-version 5 -module-cache-path build/module-cache Sources/Shar
 xcrun swiftc -swift-version 5 -module-cache-path build/module-cache Sources/Shared/LiveVoice.swift Tests/LiveVoiceTests.swift -o build/live-voice-tests
 build/live-voice-tests
 build/state-tests
+xcrun swiftc -swift-version 5 -module-cache-path build/module-cache Sources/Shared/*.swift Tests/JevTests.swift -o build/jev-tests
+build/jev-tests
 xcrun swiftc -swift-version 5 -module-cache-path build/module-cache Sources/Shared/*.swift Tests/CorrectionTests.swift -o build/correction-tests
 build/correction-tests
 xcrun swiftc -swift-version 5 -module-cache-path build/module-cache Sources/Shared/*.swift Tests/CustomPhraseTests.swift -o build/custom-phrase-tests
