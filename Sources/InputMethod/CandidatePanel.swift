@@ -38,7 +38,7 @@ final class CandidatePanel: NSPanel {
     override var canBecomeMain: Bool { false }
     func show(title: String, candidates: [String] = [], selected: Int = -1,
               scores: [Double]? = nil,
-              partialRows: Set<Int> = [],
+              partialRows: Set<Int> = [], numbered: Bool = true,
               detail: String, anchor: NSRect) {
         stack.arrangedSubviews.forEach { stack.removeArrangedSubview($0); $0.removeFromSuperview() }
         let heading = NSTextField(wrappingLabelWithString: title)
@@ -49,8 +49,11 @@ final class CandidatePanel: NSPanel {
         for (index, text) in candidates.enumerated() {
             let badge = scores.flatMap { $0.indices.contains(index) ? "  ✦ Jev \(String(format: "%.1f", $0[index]))" : nil } ?? ""
             let coverage = partialRows.contains(index) ? "（部分）" : ""
-            let button = NSButton(title: "\(index + 1)  \(text)\(coverage)\(badge)", target: self, action: #selector(selectCandidate(_:)))
+            let button = NSButton(title: "\(numbered ? "\(index + 1)  " : "")\(text)\(coverage)\(badge)", target: self, action: #selector(selectCandidate(_:)))
             button.tag = index
+            // A long 猜你想说 line is cut at the panel's maximum width instead of widening it.
+            button.lineBreakMode = .byTruncatingTail
+            button.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             button.isBordered = false
             button.alignment = .left
             button.font = .systemFont(ofSize: Settings.load().fontSize)

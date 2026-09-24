@@ -90,6 +90,14 @@ final class NativeVoiceClient: VoiceTextClient {
         check(!gate.finish(second) && gate.job == third, "cancelled late callback cannot clear newer job")
         gate.invalidate()
         check(!gate.finish(third), "partial completing after release cannot override final")
+        // 猜你想说 previews the highlighted suggestion, swaps it in place, and takes it back.
+        let field = NativeVoiceClient("", selection: NSRange(location: 0, length: 0))
+        let guess = VoiceComposition(client: field)
+        check(guess.update("好的，我周六有空", client: field) && guess.update("可以，一起打球", client: field),
+              "moving the highlight re-marks the preview")
+        check(field.view.string == "可以，一起打球" && field.view.hasMarkedText(), "only the highlighted suggestion shows, still marked")
+        guess.cancel(client: field)
+        check(field.view.string.isEmpty && !field.view.hasMarkedText(), "Esc leaves the input box as it was")
         print("PASS: native NSTextView live composition, Unicode revisions, final replacement, reentrant/late results, selection restoration, caret guards, partial decode scheduling")
     }
 }

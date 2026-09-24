@@ -9,6 +9,7 @@ struct SettingsView: View {
         TabView {
             general.tabItem { Text("输入与语音") }
             JevSettingsView(service: service).tabItem { Text("Jev 选词") }
+            ContextGuessSettingsView(service: service, guesser: service.guesser).tabItem { Text("猜你想说") }
             CorrectionSettingsView(service: service).tabItem { Text("语音纠错") }
             WordStatsView(service: service).tabItem { Text("用词统计") }
         }.padding(8).frame(width: 540, height: 700)
@@ -47,6 +48,7 @@ struct SettingsView: View {
                             Text("语音快捷键")
                             Spacer()
                             ShortcutRecorder(shortcut: service.settings.voiceShortcut,
+                                conflict: { $0 == service.settings.guessShortcut ? "这组按键已用于猜你想说，请换一组。" : nil },
                                 onSave: { service.setVoiceShortcut($0) }, onStatus: { shortcutStatus = $0 })
                                 .frame(width: 180, height: 28)
                             Button("恢复默认") {

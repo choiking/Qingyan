@@ -23,8 +23,8 @@ enum LocalPaths {
         guard let data = try? Data(contentsOf: url) else { return nil }
         return try? JSONDecoder().decode(type, from: data)
     }
-    static func remove(_ id: UUID) {
-        for suffix in ["request", "reply", "command", "hold"] { try? FileManager.default.removeItem(at: file(id, suffix)) }
+    static func remove(_ id: UUID, suffixes: [String] = ["request", "reply", "command", "hold"]) {
+        for suffix in suffixes { try? FileManager.default.removeItem(at: file(id, suffix)) }
     }
     static func cleanStaleSessions() {
         let files = (try? FileManager.default.contentsOfDirectory(at: ipc, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
@@ -44,9 +44,12 @@ struct Settings: Codable {
     var correctionEnabled = false
     var jevEnabled = false
     var wordStatsEnabled = false
+    var contextGuessEnabled = false
+    var contextSource = ContextSource.auto.rawValue
+    var guessShortcut = VoiceShortcut.defaultGuessShortcut
     var voiceShortcut = VoiceShortcut.defaultShortcut
     init() {}
-    private enum CodingKeys: String, CodingKey { case language, fontSize, shiftToggle, modelPath, voiceShortcut, voiceVocabulary, correctionEnabled, jevEnabled, wordStatsEnabled }
+    private enum CodingKeys: String, CodingKey { case language, fontSize, shiftToggle, modelPath, voiceShortcut, voiceVocabulary, correctionEnabled, jevEnabled, wordStatsEnabled, contextGuessEnabled, contextSource, guessShortcut }
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         language = try values.decodeIfPresent(String.self, forKey: .language) ?? "auto"
@@ -57,9 +60,15 @@ struct Settings: Codable {
         correctionEnabled = try values.decodeIfPresent(Bool.self, forKey: .correctionEnabled) ?? false
         jevEnabled = try values.decodeIfPresent(Bool.self, forKey: .jevEnabled) ?? false
         wordStatsEnabled = try values.decodeIfPresent(Bool.self, forKey: .wordStatsEnabled) ?? false
+        contextGuessEnabled = try values.decodeIfPresent(Bool.self, forKey: .contextGuessEnabled) ?? false
+        contextSource = try values.decodeIfPresent(String.self, forKey: .contextSource) ?? ContextSource.auto.rawValue
         // Old settings have no shortcut. A damaged shortcut must not reset the user's other preferences.
         if let shortcut = try? values.decode(VoiceShortcut.self, forKey: .voiceShortcut), shortcut.validationError == nil {
             voiceShortcut = shortcut
+        }
+        // 猜你想说 is triggered by a key press, never by a held modifier.
+        if let shortcut = try? values.decode(VoiceShortcut.self, forKey: .guessShortcut), shortcut.validationError == nil, !shortcut.isModifier {
+            guessShortcut = shortcut
         }
     }
     static var url: URL { LocalPaths.root.appendingPathComponent("settings.json") }

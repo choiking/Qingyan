@@ -3,7 +3,9 @@
 <plist version="1.0"><dict>
 <key>CFBundleIdentifier</key><string>org.localinput.Voice</string>
 <key>CFBundleName</key><string>轻言语音</string>
-<key>CFBundleDisplayName</key><string>轻言语音</string>
+<!-- Must equal the bundle's file name; the localized name comes from InfoPlist.strings. -->
+<key>CFBundleDisplayName</key><string>LocalInput Voice</string>
+<key>LSHasLocalizedDisplayName</key><true/>
 <key>CFBundleExecutable</key><string>LocalInputVoice</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>0.1.16</string>

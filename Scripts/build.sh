@@ -6,6 +6,14 @@ python3 Scripts/bootstrap.py --verify-only
 BUILD="$ROOT/build"
 APP="$BUILD/LocalInput.app"
 VOICE="$APP/Contents/Helpers/LocalInput Voice.app"
+# Use the same certificate for successive builds so TCC can retain permission grants.
+# An ad-hoc signature identifies only one build, even when the bundle ID is unchanged.
+# Defaults to this Mac's private local identity; QINGYAN_SIGN_IDENTITY=- forces ad-hoc.
+SIGNING_IDENTITY="${QINGYAN_SIGN_IDENTITY:-Qingyan Local Signing}"
+SIGNING_ARGS=()
+if test -z "${QINGYAN_SIGN_IDENTITY:-}"; then
+  SIGNING_ARGS=(--keychain "$(bash Scripts/local-signing.sh)")
+fi
 # The speech runtime and model are generated output too; clear them so a
 # replaced engine leaves nothing stale in the helper.
 rm -rf "$VOICE/Contents/Frameworks" "$VOICE/Contents/Resources/Models"
@@ -16,6 +24,13 @@ export CLANG_MODULE_CACHE_PATH="$BUILD/module-cache"
 export SWIFT_MODULECACHE_PATH="$BUILD/module-cache"
 cp Resources/InputMethod-Info.plist "$APP/Contents/Info.plist"
 cp Resources/Voice-Info.plist "$VOICE/Contents/Info.plist"
+# Finder and privacy settings show the file name unless a localized display name
+# exists; the base CFBundleDisplayName must equal the file name for it to apply.
+for lang in en zh-Hans; do
+  mkdir -p "$APP/Contents/Resources/$lang.lproj" "$VOICE/Contents/Resources/$lang.lproj"
+  cp Resources/InputMethod-InfoPlist.strings "$APP/Contents/Resources/$lang.lproj/InfoPlist.strings"
+  cp Resources/Voice-InfoPlist.strings "$VOICE/Contents/Resources/$lang.lproj/InfoPlist.strings"
+done
 python3 Tests/BundlePermissionTests.py "$APP"
 cp Vendor/rime/dist/lib/librime.1.17.0.dylib "$APP/Contents/Frameworks/librime.1.dylib"
 # librime discovers plugins in a "rime-plugins" directory beside its own dylib.
@@ -63,18 +78,21 @@ xcrun swiftc -swift-version 5 -O -target arm64-apple-macos14.0 \
   -module-cache-path "$BUILD/module-cache" -module-name LocalInputVoice \
   -import-objc-header Sources/Bridge/SherpaBridge.h -I Vendor/sherpa-onnx/include \
   Sources/Shared/*.swift Sources/Companion/*.swift \
-  -L "$VOICE/Contents/Frameworks" -l sherpa-onnx-c-api -framework AppKit -framework SwiftUI -framework AVFoundation \
+  -L "$VOICE/Contents/Frameworks" -l sherpa-onnx-c-api -framework AppKit -framework SwiftUI -framework AVFoundation -framework ScreenCaptureKit -framework Vision -framework CoreML \
   -Xlinker -rpath -Xlinker '@executable_path/../Frameworks' -o "$VOICE/Contents/MacOS/LocalInputVoice"
 rm -rf "$BUILD/deploy-user"
 mkdir -p "$BUILD/deploy-user"
 "$APP/Contents/MacOS/LocalInput" --deploy-rime "$APP/Contents/Resources/Rime" "$BUILD/deploy-user"
 ditto "$BUILD/deploy-user/build" "$APP/Contents/Resources/Rime/build"
 xcrun swift Scripts/icon.swift "$APP/Contents/Resources/InputIcon-Qingyan.tiff" "$BUILD/icon-preview-0.1.16.png"
-codesign --force --sign - --timestamp=none "$APP/Contents/Frameworks/librime.1.dylib"
-codesign --force --sign - --timestamp=none "$APP/Contents/Frameworks/rime-plugins/librime-octagram.dylib"
-codesign --force --sign - --timestamp=none "$VOICE/Contents/Frameworks/"*.dylib
-codesign --force --sign - --timestamp=none "$VOICE"
-codesign --force --sign - --timestamp=none "$APP"
+codesign --force --sign "$SIGNING_IDENTITY" ${SIGNING_ARGS[@]+"${SIGNING_ARGS[@]}"} --timestamp=none "$APP/Contents/Frameworks/librime.1.dylib"
+codesign --force --sign "$SIGNING_IDENTITY" ${SIGNING_ARGS[@]+"${SIGNING_ARGS[@]}"} --timestamp=none "$APP/Contents/Frameworks/rime-plugins/librime-octagram.dylib"
+codesign --force --sign "$SIGNING_IDENTITY" ${SIGNING_ARGS[@]+"${SIGNING_ARGS[@]}"} --timestamp=none "$VOICE/Contents/Frameworks/"*.dylib
+codesign --force --sign "$SIGNING_IDENTITY" ${SIGNING_ARGS[@]+"${SIGNING_ARGS[@]}"} --timestamp=none "$VOICE"
+codesign --force --sign "$SIGNING_IDENTITY" ${SIGNING_ARGS[@]+"${SIGNING_ARGS[@]}"} --timestamp=none "$APP"
 codesign --verify --deep --strict "$APP"
+if test "$SIGNING_IDENTITY" = '-'; then
+  printf 'Ad-hoc build: macOS permissions may need to be removed and granted again after installation. Set QINGYAN_SIGN_IDENTITY to a stable Apple Development certificate to retain them.\n'
+fi
 xcrun swiftc -swift-version 5 -module-cache-path "$BUILD/module-cache" Scripts/InputSource.swift -o "$BUILD/input-source"
 printf 'Built: %s\n' "$APP"

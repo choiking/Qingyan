@@ -9,6 +9,8 @@ struct VoiceShortcut: Codable, Equatable {
     static let modifierMask: NSEvent.ModifierFlags = [.control, .option, .shift, .command]
     static let defaultShortcut = VoiceShortcut(keyCode: 49,
         modifiers: NSEvent.ModifierFlags([.control, .option]).rawValue)
+    static let defaultGuessShortcut = VoiceShortcut(keyCode: 5,
+        modifiers: NSEvent.ModifierFlags([.control, .option]).rawValue)
     static let functionKeys: Set<UInt16> = [64, 79, 80, 90, 96, 97, 98, 99, 100, 101, 103, 105, 106, 107, 109, 111, 113, 118, 120, 122]
     static let modifierNames: [UInt16: String] = [54: "右 Command", 55: "左 Command", 56: "左 Shift",
         58: "左 Option", 59: "左 Control", 60: "右 Shift", 61: "右 Option", 62: "右 Control", 63: "Fn"]

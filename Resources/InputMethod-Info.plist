@@ -4,7 +4,9 @@
 <key>CFBundleDevelopmentRegion</key><string>zh_CN</string>
 <key>CFBundleIdentifier</key><string>org.localinput.inputmethod.LocalInput</string>
 <key>CFBundleName</key><string>轻言输入法</string>
-<key>CFBundleDisplayName</key><string>轻言输入法</string>
+<!-- Must equal the bundle's file name; the localized name comes from InfoPlist.strings. -->
+<key>CFBundleDisplayName</key><string>LocalInput</string>
+<key>LSHasLocalizedDisplayName</key><true/>
 <key>CFBundleExecutable</key><string>LocalInput</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>0.1.16</string>

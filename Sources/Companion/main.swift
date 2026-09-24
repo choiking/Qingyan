@@ -14,6 +14,16 @@ if CommandLine.arguments.count >= 4 && CommandLine.arguments[1] == "--transcribe
     } catch { fputs("\(error.localizedDescription)\n", stderr); exit(1) }
 }
 
+if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--recognize-text" {
+    do {
+        let start = Date()
+        let lines = try ContextReader.recognizeText(in: URL(fileURLWithPath: CommandLine.arguments[2]))
+        print(lines.joined(separator: "\n"))
+        fputs(String(format: "Recognized %d lines in %.2fs\n", lines.count, Date().timeIntervalSince(start)), stderr)
+        exit(0)
+    } catch { fputs("\(error.localizedDescription)\n", stderr); exit(1) }
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
     var service: VoiceService!
     var window: NSWindow!
@@ -28,7 +38,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.isReleasedWhenClosed = false
         window.contentView = NSHostingView(rootView: SettingsView(service: service))
         window.center()
-        if CommandLine.arguments.count == 3, ["--render-settings", "--render-correction", "--render-word-stats"].contains(CommandLine.arguments[1]) {
+        if CommandLine.arguments.count == 3, ["--render-settings", "--render-correction", "--render-word-stats", "--render-context"].contains(CommandLine.arguments[1]) {
+            if CommandLine.arguments[1] == "--render-context" {
+                window.contentView = NSHostingView(rootView: ContextGuessSettingsView(service: service, guesser: service.guesser).frame(width: 540, height: 700))
+            }
             if CommandLine.arguments[1] == "--render-word-stats" {
                 window.contentView = NSHostingView(rootView: WordStatsView(service: service).frame(width: 540, height: 700))
             }
@@ -77,6 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     func applicationDidBecomeActive(_ notification: Notification) {
         service?.refreshMicrophonePermission()
+        service?.guesser.refreshPermissions()
         if window != nil { showSettings() }
     }
     func applicationWillTerminate(_ notification: Notification) { service?.clearTranscript(); service?.shutdown() }

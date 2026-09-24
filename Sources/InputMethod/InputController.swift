@@ -35,12 +35,22 @@ final class LocalInputController: IMKInputController {
     private var jevStatus = ""
     private var manualCandidates = false
     private var previousRaw = ""
+    private var guessID: UUID?
+    private var guessObserver: NSObjectProtocol?
+    private var guessOrigin: GuessOrigin?
+    private var guesses: [String] = []
+    private var guessSelected = 0
+    private var guessPreview: VoiceComposition?
+    private var guessNotice = false
+    private var guessSource = ""
+    private struct GuessOrigin { let client: ObjectIdentifier; let pid: pid_t; let selection: NSRange; let prefix: String? }
     private static weak var activeController: LocalInputController?
     private static var companionPrepared = false
 
     override func activateServer(_ sender: Any!) {
         super.activateServer(sender)
         Self.activeController?.cancelJev()
+        Self.activeController?.cancelGuess()
         Self.activeController?.panel.orderOut(nil)
         Self.activeController = self
         active = true
@@ -64,6 +74,7 @@ final class LocalInputController: IMKInputController {
     }
     override func deactivateServer(_ sender: Any!) {
         correctionUndo = nil
+        cancelGuess()
         commitComposition(sender)
         cancelVoice()
         panel.orderOut(nil)
@@ -75,6 +86,7 @@ final class LocalInputController: IMKInputController {
     }
     override func inputControllerWillClose() {
         cancelJev()
+        cancelGuess()
         cancelVoice()
         panel.orderOut(nil)
         super.inputControllerWillClose()
@@ -86,6 +98,26 @@ final class LocalInputController: IMKInputController {
     override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
         guard let event else { return false }
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if event.type == .keyDown, voiceID == nil {
+            let settings = Settings.load()
+            if settings.contextGuessEnabled, settings.guessShortcut.matches(keyCode: event.keyCode, flags: flags) {
+                if !event.isARepeat { startGuess() }
+                return true
+            }
+        }
+        if guessID != nil || guessNotice, event.type == .keyDown || event.type == .leftMouseDown || event.type == .rightMouseDown {
+            if event.type == .keyDown, flags.intersection([.command, .control, .option, .shift]).isEmpty,
+               let key = ContextGuess.panelKey(event.keyCode) {
+                switch key {
+                case .dismiss where event.keyCode == 53 || !guesses.isEmpty: cancelGuess(); return true
+                case .accept where !guesses.isEmpty && guessStillValid(): acceptGuess(guessSelected); return true
+                case .choose(let row) where guesses.indices.contains(row) && guessStillValid(): acceptGuess(row); return true
+                case .move(let step) where !guesses.isEmpty && guessStillValid(): moveGuess(step); return true
+                default: break
+                }
+            }
+            cancelGuess()
+        }
         if event.type == .keyDown || event.type == .leftMouseDown || event.type == .rightMouseDown {
             let undo = correctionUndo
             correctionUndo = nil
@@ -329,8 +361,134 @@ final class LocalInputController: IMKInputController {
             }
         }
     }
+    // 猜你想说: on the shortcut, the helper reads the focused window and the local model
+    // guesses what to type. Any other key, click, voice press or focus change cancels it.
+    private func startGuess() {
+        cancelGuess()
+        correctionUndo = nil
+        if hasMarkedText || !engine.rawInput().isEmpty { commitComposition(nil) }
+        guard active, Self.activeController === self, let destination = client(),
+              let app = NSWorkspace.shared.frontmostApplication, app.bundleIdentifier != "org.localinput.Voice" else { return }
+        let id = UUID()
+        let prefix = precedingText(destination)
+        guessID = id
+        guessOrigin = GuessOrigin(client: ObjectIdentifier(destination as AnyObject), pid: app.processIdentifier,
+                                  selection: destination.selectedRange(), prefix: prefix)
+        do {
+            try LocalPaths.prepare()
+            try LocalPaths.write(ContextRequest(id: id, pid: app.processIdentifier, precedingText: prefix ?? "",
+                                                caret: caretLine(destination, prefix: prefix), created: Date()), to: LocalPaths.file(id, "context"))
+        } catch { showGuessNotice("猜你想说暂不可用", detail: error.localizedDescription); return }
+        guessObserver = DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("org.localinput.context.reply"), object: id.uuidString, queue: .main) { [weak self] _ in
+                self?.receiveGuess(id)
+            }
+        launchCompanion(activate: false) { [weak self] error in
+            guard let self, self.guessID == id else { return }
+            if let error { self.showGuessNotice("猜你想说暂不可用", detail: error.localizedDescription); return }
+            DistributedNotificationCenter.default().postNotificationName(
+                NSNotification.Name("org.localinput.context.start"), object: id.uuidString, userInfo: nil, deliverImmediately: true)
+        }
+        panel.onSelect = nil
+        panel.show(title: "✦ 正在猜你想说…", detail: "读取当前窗口，本机推测 · Esc 取消", anchor: anchor())
+        DispatchQueue.main.asyncAfter(deadline: .now() + 15) { [weak self] in
+            guard let self, self.guessID == id, self.guesses.isEmpty else { return }
+            self.showGuessNotice("猜你想说超时", detail: "本机模型可能仍在加载，稍后再试")
+        }
+    }
+    private func receiveGuess(_ id: UUID) {
+        guard guessID == id, let reply = LocalPaths.read(ContextReply.self, from: LocalPaths.file(id, "guess")) else { return }
+        guard guessStillValid() else { cancelGuess(); return }
+        switch reply.phase {
+        case "ready" where !reply.suggestions.isEmpty:
+            guesses = Array(reply.suggestions.prefix(ContextGuess.maximumSuggestions))
+            guessSource = reply.source ?? ""
+            // Previewing the highlighted suggestion as marked text is what makes apps with their
+            // own text engines leave ↑↓ and Esc to the input method, as while typing pinyin.
+            if let destination = client() {
+                let adapter = IMKVoiceTextClient(client: destination)
+                let preview = VoiceComposition(client: adapter)
+                if preview.canPreview {
+                    guard preview.update(guesses[0], client: adapter) else { cancelGuess(); return }
+                    guessPreview = preview
+                }
+            }
+            showGuesses()
+        case "error": showGuessNotice("猜你想说暂不可用", detail: reply.detail + " · 详见轻言设置")
+        default: showGuessNotice("没有猜到", detail: reply.detail.isEmpty ? "当前窗口没有足够的上下文" : reply.detail)
+        }
+    }
+    // From the first character of the caret's line to the caret: where the input box's
+    // text starts, even when something is already typed. The helper reads the column above it.
+    private func caretLine(_ destination: IMKTextInput, prefix: String?) -> NSRect {
+        let caret = anchor()
+        let selection = destination.selectedRange()
+        guard let line = prefix?.components(separatedBy: .newlines).last, !line.isEmpty,
+              selection.location != NSNotFound, selection.location >= line.utf16.count else { return caret }
+        let start = destination.firstRect(forCharacterRange: NSRange(location: selection.location - line.utf16.count, length: 0), actualRange: nil)
+        guard start.height > 0, start.minX < caret.minX, caret.minX - start.minX < 4000 else { return caret }
+        return NSRect(x: start.minX, y: caret.minY, width: caret.maxX - start.minX, height: caret.height)
+    }
+    // Pressing the shortcut always gets an answer, including why nothing was guessed.
+    private func showGuessNotice(_ title: String, detail: String) {
+        cancelGuess()
+        guessNotice = true
+        panel.onSelect = nil
+        panel.show(title: title, detail: detail + " · Esc 关闭", anchor: anchor())
+    }
+    // The guess belongs to the exact field, caret and text it was made for.
+    private func guessStillValid() -> Bool {
+        guard let origin = guessOrigin, active, Self.activeController === self, voiceID == nil, !hasMarkedText,
+              engine.rawInput().isEmpty, NSWorkspace.shared.frontmostApplication?.processIdentifier == origin.pid,
+              let current = client(), ObjectIdentifier(current as AnyObject) == origin.client else { return false }
+        let unchanged = guessPreview.map { $0.matches(IMKVoiceTextClient(client: current)) } ?? (current.selectedRange() == origin.selection)
+        return unchanged && precedingText(current) == origin.prefix
+    }
+    private func showGuesses() {
+        panel.onSelect = { [weak self] index in self?.acceptGuess(index) }
+        panel.show(title: "✦ 猜你想说", candidates: guesses, selected: guessSelected,
+                   detail: "↑↓ 选择  Enter 输入  Esc 取消 · " + (guessSource.isEmpty ? "本机根据当前窗口推测" : "来源：\(guessSource)"),
+                   anchor: anchor())
+    }
+    private func moveGuess(_ step: Int) {
+        guessSelected = (guessSelected + step + guesses.count) % guesses.count
+        if let preview = guessPreview, let destination = client(),
+           !preview.update(guesses[guessSelected], client: IMKVoiceTextClient(client: destination)) { cancelGuess(); return }
+        showGuesses()
+    }
+    private func acceptGuess(_ index: Int) {
+        guard guesses.indices.contains(index), guessStillValid(), let destination = client() else { cancelGuess(); return }
+        let text = guesses[index], preview = guessPreview
+        // Detach before the client call, which can reenter the controller.
+        guessPreview = nil
+        cancelGuess()
+        if let preview { preview.commit(text, client: IMKVoiceTextClient(client: destination)) }
+        else { destination.insertText(text, replacementRange: replacement) }
+    }
+    private func cancelGuess() {
+        let preview = guessPreview
+        guessPreview = nil
+        if let id = guessID {
+            if guesses.isEmpty, guessOrigin != nil {
+                DistributedNotificationCenter.default().postNotificationName(
+                    NSNotification.Name("org.localinput.context.cancel"), object: id.uuidString, userInfo: nil, deliverImmediately: true)
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { LocalPaths.remove(id, suffixes: ["context", "guess"]) }
+        }
+        if let observer = guessObserver {
+            DistributedNotificationCenter.default().removeObserver(observer)
+            guessObserver = nil
+        }
+        let shown = guessID != nil || guessNotice
+        guessID = nil; guessOrigin = nil; guesses = []; guessSelected = 0; guessNotice = false; guessSource = ""
+        if shown { panel.orderOut(nil) }
+        // Takes back the previewed suggestion, restoring what was there.
+        if let preview, let destination = client() { preview.cancel(client: IMKVoiceTextClient(client: destination)) }
+    }
     private var replacement: NSRange { NSRange(location: NSNotFound, length: NSNotFound) }
     override func commitComposition(_ sender: Any!) {
+        // A host finalizing its composition must not keep an unchosen suggestion.
+        if guessPreview != nil { cancelGuess() }
         let selected = jevOrder.flatMap { $0.engineIndex(for: $0.selected) }
         cancelJev()
         if let selected { engine.selectGlobal(UInt(selected)) }
@@ -339,7 +497,7 @@ final class LocalInputController: IMKInputController {
             refresh()
         } else if selected != nil { refresh() }
     }
-    override func hidePalettes() { cancelJev(); panel.orderOut(nil) }
+    override func hidePalettes() { cancelJev(); cancelGuess(); panel.orderOut(nil) }
     private func anchor() -> NSRect {
         var rect = NSRect.zero
         if let c = client() { _ = c.attributes(forCharacterIndex: 0, lineHeightRectangle: &rect) }
@@ -353,6 +511,9 @@ final class LocalInputController: IMKInputController {
         let menu = NSMenu()
         menu.addItem(withTitle: english ? "切换到中文" : "切换到英文", action: #selector(toggleMode(_:)), keyEquivalent: "")
         menu.addItem(withTitle: "轻言设置与语音状态…", action: #selector(openSettings(_:)), keyEquivalent: "")
+        if Settings.load().contextGuessEnabled {
+            menu.addItem(withTitle: "猜我想说（\(Settings.load().guessShortcut.displayName)）", action: #selector(guessNow(_:)), keyEquivalent: "")
+        }
         menu.addItem(.separator())
         let hint = NSMenuItem(title: "语音快捷键：\(Settings.load().voiceShortcut.displayName)", action: nil, keyEquivalent: "")
         menu.addItem(hint)
@@ -360,6 +521,7 @@ final class LocalInputController: IMKInputController {
     }
     private func switchTypingMode() {
         cancelJev()
+        cancelGuess()
         if !english {
             let raw = engine.takeRawInput()
             // Clear engine/IME state before insertText, which can reenter the controller.
@@ -379,6 +541,7 @@ final class LocalInputController: IMKInputController {
         WordStatsRecorder.shared.record(text, source: source, vocabulary: settings.voiceVocabulary)
     }
     @objc private func openSettings(_ sender: Any?) { launchCompanion(activate: true) }
+    @objc private func guessNow(_ sender: Any?) { startGuess() }
     private func launchCompanion(activate: Bool, completion: ((Error?) -> Void)? = nil) {
         let url = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/LocalInput Voice.app")
         let configuration = NSWorkspace.OpenConfiguration()
@@ -391,6 +554,7 @@ final class LocalInputController: IMKInputController {
     private func startVoice(_ shortcut: VoiceShortcut) {
         // Starting a fresh press supersedes an unfinished transcription.
         if voiceID != nil { cancelVoice(resetPress: false) }
+        cancelGuess()
         commitComposition(nil)
         let id = UUID()
         voiceID = id

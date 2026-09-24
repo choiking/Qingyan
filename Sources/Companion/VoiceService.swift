@@ -10,6 +10,8 @@ final class VoiceService: NSObject, ObservableObject {
     @Published var correctionStatus = "尚未检查本地纠错模型"
     @Published var preparingCorrection = false
     private let corrector = LocalCorrector()
+    // 猜你想说 shares the local model server with correction.
+    lazy var guesser = ContextGuessService(corrector: corrector)
     private var correctionTask: Task<Void, Never>?
     private var preparationTask: Task<Void, Never>?
     private var sessionVocabulary = ""
@@ -57,7 +59,8 @@ final class VoiceService: NSObject, ObservableObject {
         let model = modelURL.path, language = settings.language
         worker.async { [weak self] in try? self?.recognizer.prepare(model: model, language: language) }
         // Covers launch before the notification listener is connected.
-        if settings.correctionEnabled { prepareCorrection() }
+        if settings.correctionEnabled || settings.contextGuessEnabled { prepareCorrection() }
+        _ = guesser
         discoverRequest()
     }
     @objc private func startNotification(_ note: Notification) {
@@ -286,15 +289,22 @@ final class VoiceService: NSObject, ObservableObject {
     // still running on the worker would crash, so let it finish first.
     func waitForRecognizer() { worker.sync {} }
     func shutdown() {
-        preparationTask?.cancel(); cancel(); corrector.shutdown(); waitForRecognizer()
+        preparationTask?.cancel(); cancel(); guesser.shutdown(); corrector.shutdown(); waitForRecognizer()
     }
     func saveSettings() {
         do { try settings.save() } catch { detail = "保存设置失败：\(error.localizedDescription)" }
     }
     @discardableResult func setVoiceShortcut(_ shortcut: VoiceShortcut) -> Bool {
-        guard shortcut.validationError == nil else { return false }
+        guard shortcut.validationError == nil, shortcut != settings.guessShortcut else { return false }
         var updated = settings
         updated.voiceShortcut = shortcut
+        do { try updated.save(); settings = updated; return true }
+        catch { detail = "保存快捷键失败：\(error.localizedDescription)"; return false }
+    }
+    @discardableResult func setGuessShortcut(_ shortcut: VoiceShortcut) -> Bool {
+        guard shortcut.validationError == nil, !shortcut.isModifier, shortcut != settings.voiceShortcut else { return false }
+        var updated = settings
+        updated.guessShortcut = shortcut
         do { try updated.save(); settings = updated; return true }
         catch { detail = "保存快捷键失败：\(error.localizedDescription)"; return false }
     }

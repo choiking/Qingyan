@@ -3,12 +3,20 @@ import SwiftUI
 
 struct ShortcutRecorder: NSViewRepresentable {
     let shortcut: VoiceShortcut
+    var label = "语音输入快捷键"
+    var allowsModifierKeys = true
+    var conflict: (VoiceShortcut) -> String? = { _ in nil }
+    var savedMessage: (VoiceShortcut) -> String = { "已保存：按住 \($0.displayName) 说话，文字实时显示，松开定稿。" }
     let onSave: (VoiceShortcut) -> Bool
     let onStatus: (String?) -> Void
 
     func makeNSView(context: Context) -> ShortcutButton { ShortcutButton() }
     func updateNSView(_ button: ShortcutButton, context: Context) {
         button.shortcut = shortcut
+        button.setAccessibilityLabel(label)
+        button.allowsModifierKeys = allowsModifierKeys
+        button.conflict = conflict
+        button.savedMessage = savedMessage
         button.onSave = onSave
         button.onStatus = onStatus
         button.isEnabled = context.environment.isEnabled
@@ -22,6 +30,9 @@ final class ShortcutButton: NSButton {
     var shortcut = VoiceShortcut.defaultShortcut
     var onSave: ((VoiceShortcut) -> Bool)?
     var onStatus: ((String?) -> Void)?
+    var allowsModifierKeys = true
+    var conflict: ((VoiceShortcut) -> String?)?
+    var savedMessage: ((VoiceShortcut) -> String)?
     private var monitor: Any?
     private var focusObserver: NSObjectProtocol?
     private var recording = false
@@ -50,7 +61,7 @@ final class ShortcutButton: NSButton {
         guard let window else { return }
         recording = true
         refreshTitle()
-        onStatus?("按功能键或组合键；修饰键请单独按下再松开。Esc 取消。")
+        onStatus?(allowsModifierKeys ? "按功能键或组合键；修饰键请单独按下再松开。Esc 取消。" : "按功能键或组合键。Esc 取消。")
         // Local to this app, and only while its window is active. No global keyboard permissions.
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged, .leftMouseDown, .rightMouseDown]) { [weak self, weak window] event in
             guard let self, self.recording else { return event }
@@ -63,6 +74,7 @@ final class ShortcutButton: NSButton {
                 return event
             }
             if event.type == .flagsChanged {
+                guard self.allowsModifierKeys else { return nil }
                 let flags = event.modifierFlags
                 if VoiceShortcut.isModifierDown(event.keyCode, flags: flags) {
                     let meaningful = flags.intersection([.control, .option, .shift, .command, .function])
@@ -92,11 +104,11 @@ final class ShortcutButton: NSButton {
             object: window, queue: .main) { [weak self] _ in self?.stop() }
     }
     private func save(_ candidate: VoiceShortcut) {
-        if let error = candidate.validationError { onStatus?(error); return }
+        if let error = candidate.validationError ?? conflict?(candidate) { onStatus?(error); return }
         if onSave?(candidate) == true {
             shortcut = candidate
             stop()
-            onStatus?("已保存：按住 \(candidate.displayName) 说话，文字实时显示，松开定稿。")
+            onStatus?(savedMessage?(candidate) ?? "已保存：\(candidate.displayName)")
         } else { stop(); onStatus?("保存失败，请重试。") }
     }
     func stop() {

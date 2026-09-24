@@ -21,6 +21,9 @@ xcrun swiftc -swift-version 5 -module-cache-path build/module-cache Sources/Shar
 build/custom-phrase-tests "$APP/Contents/Resources/Rime/luna_pinyin.dict.yaml" build/custom-phrase-test
 xcrun swiftc -swift-version 5 -module-cache-path build/module-cache Sources/Shared/*.swift Tests/WordStatsTests.swift -o build/word-stats-tests
 build/word-stats-tests build/word-stats-test
+xcrun swiftc -swift-version 5 -module-cache-path build/module-cache Sources/Shared/*.swift Tests/ContextGuessTests.swift -o build/context-guess-tests
+build/context-guess-tests
 plutil -lint "$APP/Contents/Info.plist" "$APP/Contents/Helpers/LocalInput Voice.app/Contents/Info.plist"
 codesign --verify --deep --strict "$APP"
 python3 Tests/BundlePermissionTests.py "$APP"
+python3 Tests/InstallTests.py
