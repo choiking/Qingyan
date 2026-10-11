@@ -11,17 +11,19 @@ struct JevSettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             Label("Jev 上下文选词", systemImage: "sparkles").font(.title2.bold())
-            Text("先按拼音覆盖范围分组：完整匹配优先，部分匹配按覆盖长度排列；Jev 只在同组内按分数从高到低排序。")
+            Text("完整匹配优先。相同拼音下，已确认的词按使用次数、最近使用时间优先排列，其余候选再按 Jev 分数排序。")
             GroupBox {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("汽车 youxiang → 油箱\n我现在 youxiang → 又想\n请发到我的 youxiang → 邮箱")
                         .lineSpacing(8)
-                    Text("游戏只匹配 youxi，有只匹配 you，会排在完整匹配之后并标注「部分」。同组按 0–100 适配分排序，同分保持原顺序。")
+                    Text("游戏只匹配 youxi，有只匹配 you，会排在完整匹配之后并标注「部分」。Jev 分数表示语境适配程度；用词习惯会影响最终顺序，因此分数不一定递减。")
                         .font(.caption).foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
             }
             Toggle("启用 Jev 云端选词", isOn: $service.settings.jevEnabled)
                 .onChange(of: service.settings.jevEnabled) { service.saveSettings() }
+            Text("选词后自动在本机记住拼音和词条，下次输入相同拼音即可参与排序，重启后保留。无需开启「用词统计」，选词次数不会发送给 Jev。")
+                .font(.callout).foregroundStyle(.secondary)
             Text("启用并配置 Key 后，会将光标前最多 128 个 UTF-16 字符、当前拼音、预编辑文字及最多 20 个候选与覆盖信息发送到 TypeSafe。翻页保留分组顺序；超出范围使用本地顺序。覆盖无法确认、缺分或请求失败时保留本地候选。")
                 .font(.callout).foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 10) {

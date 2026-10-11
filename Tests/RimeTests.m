@@ -38,6 +38,35 @@ int main(int argc, char **argv) { @autoreleasepool {
     [engine process:0xff08 modifiers:0];
     check([[engine rawInput] isEqual:@"n"], @"backspace edits composition");
     [engine clear];
+    type(engine, "xiao");
+    NSArray *arrowPool = [engine candidatePool:20];
+    NSDictionary *beforeGrid = [engine snapshot];
+    NSArray *grid = [engine candidatesFrom:0 limit:37];
+    check(grid.count == 37 && [[grid subarrayWithRange:NSMakeRange(0, 20)] isEqual:arrowPool],
+          @"grid can read six rows plus lookahead without changing candidate order");
+    NSArray *secondGrid = [engine candidatesFrom:36 limit:37];
+    check([secondGrid.firstObject isEqual:grid[36]], @"next grid page resumes at exact global index");
+    check([[engine snapshot] isEqual:beforeGrid] && [[engine takeCommit] isEqual:@""],
+          @"grid enumeration preserves composition and highlight");
+    for (int position = 1; position < 6; position++) [engine process:0xff54 modifiers:0];
+    check([[engine snapshot][@"page"] intValue] == 1 && [[engine snapshot][@"highlight"] intValue] == 0,
+          @"native Down crosses to next page first row");
+    [engine process:0xff52 modifiers:0];
+    check([[engine snapshot][@"page"] intValue] == 0 && [[engine snapshot][@"highlight"] intValue] == 4,
+          @"native Up crosses to previous page last row");
+    check([engine highlightGlobal:arrowPool.count], @"ranked pool can continue at first unranked candidate");
+    check([[engine snapshot][@"page"] intValue] == 4 && [[engine snapshot][@"highlight"] intValue] == 0,
+          @"native continuation skips exactly the ranked pool");
+    check([[engine takeCommit] isEqual:@""] && [[engine rawInput] isEqual:@"xiao"], @"arrow navigation never commits composition");
+    NSString *nativeChoice = [engine snapshot][@"candidates"][0];
+    [engine process:32 modifiers:0];
+    check([[engine takeCommit] isEqual:nativeChoice], @"Space commits visible native continuation");
+    type(engine, "xiao");
+    NSDictionary *beforeMissingHighlight = [engine snapshot];
+    BOOL missingHighlight = [engine highlightGlobal:100000];
+    check(!missingHighlight && [[engine snapshot] isEqual:beforeMissingHighlight],
+          @"missing native remainder leaves composition untouched");
+    [engine clear];
     type(engine, "hanyu");
     check([[engine snapshot][@"candidates"] containsObject:@"汉语"], @"simplified Chinese conversion");
     [engine clear];

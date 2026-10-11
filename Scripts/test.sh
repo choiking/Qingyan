@@ -15,6 +15,14 @@ build/live-voice-tests
 build/state-tests
 xcrun swiftc -swift-version 5 -module-cache-path build/module-cache Sources/Shared/*.swift Tests/JevTests.swift -o build/jev-tests
 build/jev-tests
+xcrun swiftc -swift-version 5 -module-cache-path build/module-cache -import-objc-header Sources/Bridge/RimeBridge.h \
+  Sources/Shared/*.swift Tests/CandidateLearningTests.swift build/RimeBridge.o \
+  -L "$APP/Contents/Frameworks" -l rime.1 -Xlinker -rpath -Xlinker "$APP/Contents/Frameworks" -o build/candidate-learning-tests
+learning_user=$(mktemp -d "$ROOT/build/candidate-learning-test.XXXXXX")
+build/candidate-learning-tests "$APP/Contents/Resources/Rime" "$learning_user" learn
+build/candidate-learning-tests "$APP/Contents/Resources/Rime" "$learning_user" reload
+xcrun swiftc -swift-version 5 -module-cache-path build/module-cache Sources/Shared/CandidateNavigation.swift Tests/CandidateNavigationTests.swift -o build/candidate-navigation-tests
+build/candidate-navigation-tests
 xcrun swiftc -swift-version 5 -module-cache-path build/module-cache Sources/Shared/*.swift Tests/CorrectionTests.swift -o build/correction-tests
 build/correction-tests
 xcrun swiftc -swift-version 5 -module-cache-path build/module-cache Sources/Shared/*.swift Tests/CustomPhraseTests.swift -o build/custom-phrase-tests

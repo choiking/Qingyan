@@ -133,6 +133,38 @@ static void fillTraits(RimeTraits *traits, NSString *shared, NSString *user) {
     RimeSessionId session = self.session;
     if (session) api->select_candidate(session, index);
 }
+- (NSArray<NSString *> *)candidatesFrom:(NSUInteger)start limit:(NSUInteger)limit {
+    RimeSessionId session = self.session;
+    NSMutableArray *result = [NSMutableArray array];
+    RimeCandidateListIterator iterator = {0};
+    if (session && start <= INT_MAX && RIME_API_AVAILABLE(api, candidate_list_from_index) &&
+        api->candidate_list_from_index(session, &iterator, (int)start)) {
+        while (result.count < MIN(limit, 72) && api->candidate_list_next(&iterator)) {
+            [result addObject:@(iterator.candidate.text ?: "")];
+        }
+        api->candidate_list_end(&iterator);
+    }
+    return result;
+}
+- (BOOL)highlightGlobal:(NSUInteger)index {
+    RimeSessionId session = self.session;
+    if (!session || !RIME_API_AVAILABLE(api, highlight_candidate)) return NO;
+    RIME_STRUCT(RimeContext, original);
+    if (!api->get_context(session, &original)) return NO;
+    size_t originalIndex = original.menu.page_no * original.menu.page_size + original.menu.highlighted_candidate_index;
+    api->free_context(&original);
+    api->highlight_candidate(session, index);
+    RIME_STRUCT(RimeContext, current);
+    if (api->get_context(session, &current)) {
+        BOOL found = current.menu.num_candidates > 0 &&
+            current.menu.page_no * current.menu.page_size + current.menu.highlighted_candidate_index == index;
+        api->free_context(&current);
+        if (found) return YES;
+    }
+    // Rime clamps out-of-range highlights and can still report success.
+    api->highlight_candidate(session, originalIndex);
+    return NO;
+}
 - (NSArray<NSDictionary *> *)candidateDetails:(NSUInteger)limit {
     RimeSessionId session = self.session;
     if (!session || !RIME_API_AVAILABLE(api, highlight_candidate)) return @[];

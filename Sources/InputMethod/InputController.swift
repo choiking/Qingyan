@@ -33,6 +33,9 @@ final class LocalInputController: IMKInputController {
     private var jevOrder: JevCandidateOrder?
     private var jevPool: [String] = []
     private var jevStatus = ""
+    private var candidateNavigation = CandidateNavigation()
+    private var nativeCandidates: [String] = []
+    private var hasMoreCandidates = true
     private var manualCandidates = false
     private var previousRaw = ""
     private var guessID: UUID?
@@ -76,6 +79,7 @@ final class LocalInputController: IMKInputController {
         correctionUndo = nil
         cancelGuess()
         commitComposition(sender)
+        CandidateLearningStore.shared.flush()
         cancelVoice()
         panel.orderOut(nil)
         shiftTap.reset()
@@ -198,62 +202,44 @@ final class LocalInputController: IMKInputController {
         else if let chars = event.characters, chars.unicodeScalars.count == 1,
                 let scalar = chars.unicodeScalars.first, scalar.value < 128 { key = Int32(scalar.value) }
         else { commitComposition(sender); return false }
-        if let order = jevOrder {
-            if flags.intersection([.shift]).isEmpty, [45, 61, 0xff55, 0xff56].contains(key) {
-                let offset = [45, 0xff55].contains(key) ? -1 : 1
-                cancelJev(clearOrder: false)
-                manualCandidates = true
-                if jevOrder?.turnPage(offset) == true {
-                    showCandidates(engine.snapshot())
-                    return true
-                }
-                // The ranked pool is a permutation of the first 20 native items.
-                // Resume beyond it without duplicating or skipping any candidates.
-                let nativePage = engine.snapshot()["page"] as? Int ?? 0
-                if nativePage < order.page {
-                    for _ in nativePage..<order.page { _ = engine.process(0xff56, modifiers: 0) }
-                }
-                if engine.snapshot()["lastPage"] as? Bool == true {
-                    showCandidates(engine.snapshot())
-                    return true
-                }
-                cancelJev()
-            }
-            if flags.intersection([.shift]).isEmpty, key == 0xff52 || key == 0xff54 {
-                cancelJev(clearOrder: false)
-                manualCandidates = true
-                jevOrder?.move(key == 0xff52 ? -1 : 1)
-                showCandidates(engine.snapshot())
+        if !nativeCandidates.isEmpty, !flags.contains(.shift) {
+            let actions: [Int32: CandidateNavigation.Action] = [
+                0xff51: .left, 0xff53: .right, 0xff52: .up, 0xff54: .down,
+                45: .previousPage, 61: .nextPage, 0xff55: .previousPage, 0xff56: .nextPage,
+                0xff09: .toggle
+            ]
+            if let action = actions[key] { navigateCandidates(action); return true }
+            if key == 32 || key == 0xff0d {
+                selectCandidate(at: candidateNavigation.selected)
                 return true
             }
-            let row = key == 32 ? order.selected : Int(key - 49)
-            if flags.intersection([.shift]).isEmpty, key == 32 || (49...53).contains(key), let index = order.engineIndex(for: row) {
-                cancelJev()
-                engine.selectGlobal(UInt(index))
-                refresh()
+            if (49...54).contains(key) {
+                if let position = candidateNavigation.numberPosition(Int(key - 48), count: nativeCandidates.count) {
+                    selectCandidate(at: position)
+                }
                 return true
             }
-            // Rime implicitly accepts its highlight before punctuation. Accept the
-            // visible highlight first so punctuation cannot commit a different word.
-            if let scalar = UnicodeScalar(UInt32(max(0, key))),
-               CharacterSet.punctuationCharacters.contains(scalar), ![39, 45].contains(key),
-               let index = order.engineIndex(for: order.selected) {
-                cancelJev()
-                engine.selectGlobal(UInt(index))
-                refresh()
-            }
+        }
+        // Preserve the displayed highlight when Rime accepts a word implicitly
+        // before punctuation, or when the host finalizes this composition.
+        if !nativeCandidates.isEmpty {
+            _ = engine.highlightGlobal(UInt(candidateEngineIndex(candidateNavigation.selected)))
         }
         cancelJev()
         if [0xff52, 0xff54, 0xff55, 0xff56, 45, 61, 0xff09].contains(key) { manualCandidates = true }
+        let spelling = engine.rawInput()
         let consumed = engine.process(key, modifiers: flags.contains(.shift) ? 1 : 0)
-        refresh()
+        refresh(learningSpelling: spelling)
         return consumed
     }
 
-    private func refresh() {
+    private func refresh(learningSpelling: String? = nil) {
         cancelJev()
         let commit = engine.takeCommit()
         if !commit.isEmpty {
+            if let spelling = learningSpelling, engine.rawInput().isEmpty {
+                CandidateLearningStore.shared.record(spelling: spelling, commit: commit)
+            }
             client()?.insertText(commit, replacementRange: replacement); hasMarkedText = false
             recordWords(commit, .typed)
         }
@@ -270,28 +256,72 @@ final class LocalInputController: IMKInputController {
         scheduleJev(snapshot)
         showCandidates(snapshot)
     }
+    private func candidateEngineIndex(_ position: Int) -> Int {
+        if let ranking = jevOrder?.ranking, ranking.indices.indices.contains(position) {
+            return ranking.indices[position]
+        }
+        return position
+    }
+    private func loadCandidates(through position: Int) {
+        while hasMoreCandidates && nativeCandidates.count <= position {
+            let batch = engine.candidates(from: UInt(nativeCandidates.count), limit: 37)
+            nativeCandidates.append(contentsOf: batch.prefix(36))
+            hasMoreCandidates = batch.count > 36
+        }
+    }
+    private func navigateCandidates(_ action: CandidateNavigation.Action) {
+        cancelJev(clearOrder: false)
+        manualCandidates = true
+        loadCandidates(through: candidateNavigation.selected + CandidateNavigation.expandedSize)
+        candidateNavigation.navigate(action, count: nativeCandidates.count)
+        _ = engine.highlightGlobal(UInt(candidateEngineIndex(candidateNavigation.selected)))
+        showCandidates(engine.snapshot())
+    }
+    private func selectCandidate(at position: Int) {
+        guard nativeCandidates.indices.contains(position) else { return }
+        let index = candidateEngineIndex(position)
+        let spelling = engine.rawInput()
+        cancelJev()
+        engine.selectGlobal(UInt(index))
+        refresh(learningSpelling: spelling)
+    }
     private func showCandidates(_ snapshot: [AnyHashable: Any]) {
-        let preedit = snapshot["preedit"] as? String ?? ""
-        let choices = jevOrder.map { order in order.indices.map { jevPool[$0] } }
-            ?? (snapshot["candidates"] as? [String] ?? [])
+        loadCandidates(through: candidateNavigation.start + candidateNavigation.capacity - 1)
+        let range = candidateNavigation.visibleRange(count: nativeCandidates.count)
+        let inputLength = engine.rawInput().utf8.count
+        let items = range.map { position -> CandidateGridItem in
+            let index = candidateEngineIndex(position)
+            let ranking = jevOrder?.ranking
+            let score = ranking.flatMap { $0.scores.indices.contains(index) ? $0.scores[index] : nil }
+            let partial = ranking?.coverageEnds.map { $0.indices.contains(index) && $0[index] < inputLength } ?? false
+            let number = position / 6 == candidateNavigation.selected / 6 ? position % 6 + 1 : nil
+            return CandidateGridItem(text: nativeCandidates[index], number: number,
+                                     score: score, partial: partial)
+        }
         panel.onSelect = { [weak self] index in
             guard let self, self.active else { return }
-            let global = self.jevOrder?.engineIndex(for: index)
-            self.cancelJev()
-            if let global { self.engine.selectGlobal(UInt(global)) }
-            else { self.engine.select(UInt(index)) }
-            self.refresh()
+            self.selectCandidate(at: range.lowerBound + index)
         }
-        panel.show(title: preedit, candidates: choices, selected: jevOrder?.selected ?? (snapshot["highlight"] as? Int ?? 0),
-            scores: jevOrder?.scores,
-            partialRows: jevOrder?.partialRows(inputLength: engine.rawInput().utf8.count) ?? [],
-            detail: (jevOrder.map { "完整匹配优先 · Jev 第 \($0.page + 1)/\($0.pageCount) 页 · " } ?? (jevStatus.isEmpty ? "中 · " : "\(jevStatus) · ")) +
-                "数字选词  ↑↓ 选择  − / = 翻页  Shift 英文", anchor: anchor())
+        panel.onNavigate = { [weak self] action in
+            guard let self, self.active else { return }
+            self.navigateCandidates(action)
+        }
+        panel.showGrid(items: items, selected: candidateNavigation.selected - range.lowerBound,
+                       expanded: candidateNavigation.expanded,
+                       canPrevious: candidateNavigation.start > 0,
+                       canNext: range.upperBound < nativeCandidates.count || hasMoreCandidates,
+                       status: jevOrder != nil ? (jevOrder!.ranking.personalized ? "Jev · 已按用词习惯调整" : "Jev · 完整匹配优先") : jevStatus,
+                       page: candidateNavigation.start / candidateNavigation.capacity + 1,
+                       anchor: anchor())
     }
     private func cancelJev(clearOrder: Bool = true) {
         jevGeneration = UUID()
         jevTask?.cancel(); jevTask = nil
-        if clearOrder { jevOrder = nil; jevPool = []; jevStatus = "" }
+        if clearOrder {
+            jevOrder = nil; jevPool = []; jevStatus = ""
+            candidateNavigation = CandidateNavigation()
+            nativeCandidates = []; hasMoreCandidates = true
+        }
     }
     private func precedingText(_ destination: IMKTextInput) -> String? {
         let marked = destination.markedRange()
@@ -347,7 +377,8 @@ final class LocalInputController: IMKInputController {
                 try Task.checkCancellation()
                 guard let self, isCurrent() else { return }
                 self.jevPool = pool
-                self.jevOrder = JevCandidateOrder(ranking: ranking, pageSize: pageSize)
+                let personalized = ranking.applyingLearning(CandidateLearningStore.shared.learning, context: context)
+                self.jevOrder = JevCandidateOrder(ranking: personalized, pageSize: pageSize)
                 self.showCandidates(snapshot)
             } catch {
                 // No retries on the keystroke path. Keep Rime immediately usable.
@@ -489,13 +520,14 @@ final class LocalInputController: IMKInputController {
     override func commitComposition(_ sender: Any!) {
         // A host finalizing its composition must not keep an unchosen suggestion.
         if guessPreview != nil { cancelGuess() }
-        let selected = jevOrder.flatMap { $0.engineIndex(for: $0.selected) }
+        let selected = nativeCandidates.isEmpty ? nil : candidateEngineIndex(candidateNavigation.selected)
+        let spelling = engine.rawInput()
         cancelJev()
         if let selected { engine.selectGlobal(UInt(selected)) }
         if !engine.rawInput().isEmpty {
             engine.commit()
-            refresh()
-        } else if selected != nil { refresh() }
+            refresh(learningSpelling: spelling)
+        } else if selected != nil { refresh(learningSpelling: spelling) }
     }
     override func hidePalettes() { cancelJev(); cancelGuess(); panel.orderOut(nil) }
     private func anchor() -> NSRect {

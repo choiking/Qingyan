@@ -132,9 +132,26 @@ final class JevMockProtocol: URLProtocol {
         check(!order.turnPage(1) && order.page == 3, "past ranked pool returns control to native page four")
         check(order.turnPage(-1) && order.indices == [9, 8, 7, 6, 5], "backward paging retains ranking")
         check(order.engineIndex(for: 5) == nil, "out-of-range row rejected")
+        var arrows = JevCandidateOrder(ranking: try ranking(values), pageSize: 5)
+        check(arrows.move(-1) && arrows.page == 0 && arrows.selected == 0, "Up at first candidate stays at start")
+        var visited = [arrows.engineIndex(for: arrows.selected)!]
+        for position in 1..<20 {
+            check(arrows.move(1), "Down advances within ranked pool")
+            check(arrows.page == position / 5 && arrows.selected == position % 5, "Down crosses page boundary to first row")
+            visited.append(arrows.engineIndex(for: arrows.selected)!)
+        }
+        check(visited == Array((0..<20).reversed()), "arrows traverse all ranked candidates without skipping or duplicating")
+        check(!arrows.move(1) && arrows.page == 3 && arrows.selected == 4, "Down at pool end requests native continuation without changing highlight")
+        for position in stride(from: 18, through: 0, by: -1) {
+            check(arrows.move(-1) && arrows.page == position / 5 && arrows.selected == position % 5,
+                  "Up crosses page boundary to previous last row")
+            check(arrows.engineIndex(for: arrows.selected) == 19 - position, "reverse navigation keeps commit index aligned")
+        }
         var partial = JevCandidateOrder(ranking: try ranking([1, 2, 3, 4, 0, 2.5]), pageSize: 5)
         check(partial.turnPage(1) && partial.indices == [4], "short final page maps correctly")
-        partial.move(50); check(partial.selected == 0, "navigation clamps on a partial page")
+        check(!partial.move(1) && partial.selected == 0, "Down on short final page preserves selection when exhausted")
+        check(partial.move(-1) && partial.page == 0 && partial.selected == 4, "Up from short page reaches previous last row")
+        check(partial.move(1) && partial.page == 1 && partial.selected == 0, "Down enters short final page")
         for status in [401, 429, 529] {
             JevMockProtocol.status = status
             do { _ = try await client.rank(context: context, apiKey: "test-key"); fatalError("HTTP failure accepted") }

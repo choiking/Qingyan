@@ -16,4 +16,6 @@ let app = NSApplication.shared
 app.setActivationPolicy(.prohibited)
 let server = IMKServer(name: "LocalInput_Connection", bundleIdentifier: Bundle.main.bundleIdentifier!)
 guard server != nil else { fputs("Cannot start InputMethodKit server\n", stderr); exit(1) }
+let learningFlush = NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification,
+    object: app, queue: .main) { _ in CandidateLearningStore.shared.flush(wait: true) }
 app.run()

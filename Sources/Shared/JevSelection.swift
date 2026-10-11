@@ -52,6 +52,7 @@ struct JevRanking {
     let scores: [Double]
     let indices: [Int]
     let coverageEnds: [Int]?
+    var personalized = false
     init(answers: [String: JevScore], candidateCount: Int, coverageEnds: [Int]? = nil) throws {
         guard candidateCount > 0,
               Set(answers.keys) == Set((0..<candidateCount).map { "c\($0)" }),
@@ -65,6 +66,35 @@ struct JevRanking {
             if coverage[$0] != coverage[$1] { return coverage[$0] > coverage[$1] }
             return values[$0] == values[$1] ? $0 < $1 : values[$0] > values[$1]
         }
+    }
+
+    private init(scores: [Double], indices: [Int], coverageEnds: [Int]?, personalized: Bool) {
+        self.scores = scores
+        self.indices = indices
+        self.coverageEnds = coverageEnds
+        self.personalized = personalized
+    }
+
+    func applyingLearning(_ learning: CandidateLearning, context: JevContext) -> JevRanking {
+        guard let coverage = coverageEnds, context.candidates.count == scores.count,
+              // After a partial selection, candidate text is only the remaining
+              // segment; the stored spelling/commit pair describes the whole input.
+              !context.preedit.unicodeScalars.contains(where: \.properties.isIdeographic) else { return self }
+        let choices = learning.choices(for: context.pinyin)
+        let fullLength = context.pinyin.utf8.count
+        let preferences = context.candidates.indices.map { index in
+            coverage[index] == fullLength ? choices[context.candidates[index]] : nil
+        }
+        guard preferences.contains(where: { $0 != nil }) else { return self }
+        let positions = Dictionary(uniqueKeysWithValues: indices.enumerated().map { ($0.element, $0.offset) })
+        let ordered = indices.sorted { lhs, rhs in
+            if coverage[lhs] != coverage[rhs] { return coverage[lhs] > coverage[rhs] }
+            let left = preferences[lhs], right = preferences[rhs]
+            if (left?.count ?? 0) != (right?.count ?? 0) { return (left?.count ?? 0) > (right?.count ?? 0) }
+            if let left, let right, left.lastUsed != right.lastUsed { return left.lastUsed > right.lastUsed }
+            return positions[lhs]! < positions[rhs]!
+        }
+        return JevRanking(scores: scores, indices: ordered, coverageEnds: coverageEnds, personalized: true)
     }
 }
 
@@ -87,7 +117,16 @@ struct JevCandidateOrder {
         return Set(indices.enumerated().compactMap { ends[$0.element] < inputLength ? $0.offset : nil })
     }
     var pageCount: Int { (ranking.indices.count + pageSize - 1) / pageSize }
-    mutating func move(_ offset: Int) { selected = min(max(0, selected + offset), indices.count - 1) }
+    // Traverse the displayed ranking across page boundaries. At the end,
+    // leave the highlight intact so the caller can try the native remainder.
+    @discardableResult
+    mutating func move(_ offset: Int) -> Bool {
+        let next = max(0, page * pageSize + selected + offset)
+        guard next < ranking.indices.count else { return false }
+        page = next / pageSize
+        selected = next % pageSize
+        return true
+    }
     // False means the next page is outside the ranked pool, so resume native paging.
     mutating func turnPage(_ offset: Int) -> Bool {
         let next = max(0, page + offset)
