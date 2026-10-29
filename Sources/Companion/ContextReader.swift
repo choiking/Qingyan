@@ -1,6 +1,5 @@
 import AppKit
 import Carbon
-import CoreML
 import ImageIO
 import ScreenCaptureKit
 import Vision
@@ -24,37 +23,44 @@ enum ContextReader {
         _ = AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary)
     }
     static func requestScreen() { _ = CGRequestScreenCaptureAccess() }
-    // The first Chinese OCR after install or reboot can take many seconds; pay it before a guess.
+    // The first Chinese OCR after install, reboot or a cache purge compiles the model for the
+    // Neural Engine (about 14 s here); pay it before a guess.
     static func prepareRecognizer() {
         Task.detached(priority: .utility) {
             guard let blank = CGContext(data: nil, width: 64, height: 64, bitsPerComponent: 8, bytesPerRow: 0,
                                         space: CGColorSpaceCreateDeviceGray(), bitmapInfo: 0)?.makeImage() else { return }
-            try? VNImageRequestHandler(cgImage: blank).perform([textRequest()])
+            _ = try? await lines(in: blank)
         }
     }
-    // Runs on the CPU. For a window screenshot it is about as fast as the Neural Engine here
-    // (0.25 s for 1970 × 1696), and it does not depend on the compiled-model cache in Caches:
-    // macOS purged that cache and left empty folders, after which every Neural Engine request
-    // failed (TextRecognition E5RT code 13, CRImageReaderError 1) instead of recompiling.
-    private static func textRequest() -> VNRecognizeTextRequest {
+    // Text lines with Vision's normalized, bottom-left-origin boxes. When disk space runs low, macOS
+    // purges the compiled model; VNRecognizeTextRequest then fails for the rest of the process
+    // (TextRecognition E5RT code 13, CRImageReaderError 1), while RecognizeTextRequest compiles it
+    // again. Once the older API has run, the newer one fails too, so on macOS 15 only the newer runs.
+    // Asking for the CPU does not help: both still recognize on the Neural Engine.
+    private static func lines(in image: CGImage) async throws -> [(text: String, box: CGRect)] {
+        if #available(macOS 15, *) {
+            var request = RecognizeTextRequest()
+            request.recognitionLevel = .accurate
+            request.recognitionLanguages = [Locale.Language(identifier: "zh-Hans"), Locale.Language(identifier: "en-US")]
+            request.usesLanguageCorrection = true
+            return try await request.perform(on: image).compactMap { observation in
+                observation.topCandidates(1).first.map { (text: $0.string, box: observation.boundingBox.cgRect) }
+            }
+        }
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.recognitionLanguages = ["zh-Hans", "en-US"]
         request.usesLanguageCorrection = true
-        for (stage, devices) in (try? request.supportedComputeStageDevices) ?? [:] {
-            if let cpu = devices.first(where: { if case .cpu = $0 { return true } else { return false } }) {
-                request.setComputeDevice(cpu, for: stage)
-            }
+        try VNImageRequestHandler(cgImage: image).perform([request])
+        return (request.results ?? []).compactMap { observation in
+            observation.topCandidates(1).first.map { (text: $0.string, box: observation.boundingBox) }
         }
-        return request
     }
     // Diagnostic: the recognizer 猜你想说 uses, on an image file, in this app's context.
-    static func recognizeText(in url: URL) throws -> [String] {
+    static func recognizeText(in url: URL) async throws -> [String] {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { throw CocoaError(.fileReadCorruptFile) }
-        let request = textRequest()
-        try VNImageRequestHandler(cgImage: image).perform([request])
-        return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+        return try await lines(in: image).map(\.text)
     }
 
     static func read(_ request: ContextRequest, source: ContextSource) async throws -> ScreenContext {
@@ -160,20 +166,18 @@ enum ContextReader {
         configuration.showsCursor = false
         let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
         let frame = window.frame, title = window.title ?? ""
+        // Detached, so a cancelled guess still lets a model compile finish for the next one.
         return try await Task.detached(priority: .userInitiated) {
-            let arranged = try recognize(image, frame: frame, field: field)
+            let arranged = try await recognize(image, frame: frame, field: field)
             return ScreenContext(window: Self.title(title, header: arranged.title), text: arranged.text, source: "截图识别")
         }.value
     }
-    private static func recognize(_ image: CGImage, frame: CGRect, field: CGRect?) throws -> (title: String, text: String) {
-        let request = textRequest()
-        try VNImageRequestHandler(cgImage: image).perform([request])
+    private static func recognize(_ image: CGImage, frame: CGRect, field: CGRect?) async throws -> (title: String, text: String) {
         // Vision boxes are normalized with a bottom-left origin; items are in top-left global points.
-        let items = (request.results ?? []).compactMap { observation -> ScreenItem? in
-            guard let text = observation.topCandidates(1).first?.string else { return nil }
-            let box = observation.boundingBox
-            return ScreenItem(text: text, frame: CGRect(x: frame.minX + box.minX * frame.width, y: frame.minY + (1 - box.maxY) * frame.height,
-                                                     width: box.width * frame.width, height: box.height * frame.height))
+        let items = try await lines(in: image).map { line in
+            let box = line.box
+            return ScreenItem(text: line.text, frame: CGRect(x: frame.minX + box.minX * frame.width, y: frame.minY + (1 - box.maxY) * frame.height,
+                                                          width: box.width * frame.width, height: box.height * frame.height))
         }
         return ContextGuess.arrange(ContextGuess.dropSmallText(items), field: field, window: frame)
     }

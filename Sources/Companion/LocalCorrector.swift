@@ -46,8 +46,38 @@ final class LocalCorrector {
         }
         return value
     }
+    // Homebrew builds have no bundle to read, so their servers are never treated as stale.
+    private var installedVersion: String? {
+        guard let executable else { return nil }
+        let path = URL(fileURLWithPath: executable).resolvingSymlinksInPath().path
+        guard let range = path.range(of: ".app/") else { return nil }
+        return Bundle(path: String(path[..<range.lowerBound]) + ".app")?
+            .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+    }
+    // A server left running across an Ollama update loses its runner libraries and can no longer load models.
+    private func stopStaleServer() async throws {
+        if server?.isRunning == true { server?.terminate() } else {
+            let lsof = Process(), pipe = Pipe()
+            lsof.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
+            lsof.arguments = ["-t", "-a", "-c", "ollama", "-iTCP@127.0.0.1:11435", "-sTCP:LISTEN"]
+            lsof.standardOutput = pipe
+            lsof.standardError = FileHandle.nullDevice
+            try lsof.run(); lsof.waitUntilExit()
+            String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+                .split(whereSeparator: \.isNewline).compactMap { pid_t($0) }.forEach { kill($0, SIGTERM) }
+        }
+        server = nil
+        for _ in 0..<20 {
+            if (try? await api("api/version")) == nil { return }
+            try await Task.sleep(nanoseconds: 150_000_000)
+        }
+        throw CorrectionError.message("本地纠错服务暂时无法启动")
+    }
     private func ensureServer() async throws {
-        if (try? await api("api/version")) != nil { return }
+        if let value = try? await api("api/version") {
+            guard let installed = installedVersion, let running = value["version"] as? String, running != installed else { return }
+            try await stopStaleServer()
+        }
         try Task.checkCancellation()
         if server?.isRunning != true {
             guard let executable else { throw CorrectionError.message("请先安装 Ollama，再准备本地纠错模型") }

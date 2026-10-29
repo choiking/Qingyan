@@ -7,7 +7,6 @@ LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchSe
 test -d "$APP"
 mkdir -p "$HOME/Library/Input Methods"
 bash Scripts/update-app.sh "$APP" "$TARGET" "$HOME/Library/Application Support/LocalInput/Backups"
-"$PWD/build/input-source" register "$TARGET"
 # Backups share the bundle IDs. Unregister them so privacy settings name the installed copy.
 for old in "$HOME/Library/Application Support/LocalInput/Backups/"*.app; do
   # Fails harmlessly for copies that were never registered.
@@ -19,4 +18,6 @@ done
 "$LSREGISTER" -u "$APP/Contents/Helpers/LocalInput Voice.app" 2>/dev/null || true
 "$LSREGISTER" -f "$TARGET"
 "$LSREGISTER" -f "$TARGET/Contents/Helpers/LocalInput Voice.app"
+# Enable only after LaunchServices finishes registering the installed bundle.
+"$PWD/build/input-source" register "$TARGET"
 printf 'Installed: %s\nSelect 轻言输入法 in the input menu to try it.\n' "$TARGET"

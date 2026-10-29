@@ -1,4 +1,23 @@
-# Validation — updated 2026-10-11
+# Validation — updated 2026-10-12
+
+## 重启后输入源恢复（2026-10-12）
+
+- 用户重启后轻言从系统输入源列表消失。应用仍在安装目录且严格签名有效；TIS 报告新模式启用，但系统设置列表中确实没有轻言，说明单独检查 TIS 返回值不足以验收安装。
+- 撤回下面的模式注册、矢量图标实验，恢复提交 `2c17f3d` 的 method-only 配置、原图标生成器和注册脚本；构建号增至 19。安装脚本把输入源注册放在 LaunchServices 注册之后。个人词库、选词习惯和其他用户数据未改动。
+- 完整构建和安装通过，安装包严格签名检查通过。TIS 停用/启用后，系统设置仍未列出轻言；通过「系统设置 → 键盘 → 文本输入 → 编辑 → 添加」搜索「轻言」并添加后，关闭编辑面板再打开，确认列表保留「轻言输入法」。没有再次重启电脑或验收真实键盘输入。
+- `defaults read com.apple.HIToolbox AppleEnabledInputSources` 的旧字段不反映此系统当前列表：通过系统设置成功添加后仍没有轻言，且它本来也未列出界面中的其他第三方输入法。不能据该字段判断本机持久化是否成功；此前将其当作保存失败证据的解释不成立。
+- 日志：`build/restore-input-source-{build,install}.log`；备份：`~/Library/Application Support/LocalInput/Backups/20261012-144018-CZFJaB/LocalInput.zip`。图标宽度问题仍未解决。
+
+## 「轻言」菜单图标宽度实验（2026-10-12，已撤回）
+
+- 用户截图中系统输入源菜单把双字图标压成了近似正方形；此前系统设置列表中的宽图标检查不能代表该菜单的效果。保留原有 30 × 16 pt 图案，新增单一可见的 `.Pinyin` 输入模式，通过模式的菜单、备用菜单及面板图标键引用 `InputIcon-Qingyan-Wide.tiff`，并补充本地化名称。
+- 注册脚本支持旧输入源到新模式的迁移：原来使用轻言时选中新模式，使用其他键盘时保持选择；卸载同时停用模式及父输入法。
+- 构建、plist 检查、模式元数据和两种语言名称检查、权限声明及已安装应用的严格签名验证通过。已安装并重载；系统报告父输入法不可选择、新模式可选择且图标路径正确；实际切换到 `.Pinyin` 成功后恢复原 Apple Pinyin 输入源。
+- 安装备份：`~/Library/Application Support/LocalInput/Backups/20261012-005327-1pBas6/LocalInput.zip`；日志为 `build/wide-icon-{build,install}.log`。
+- **尚未验证实际菜单中的最终宽度**：自动化工具无法取得系统输入源弹出菜单。TextEdit 的模拟按键在轻言和 Apple Pinyin 下都直接产生拉丁字母，因此也不能作为真实键盘输入验收。测试文档已清空并保存至忽略的 `build/wide-icon-test.rtf` 后关闭。
+- 用户随后反馈重新展开菜单仍没有变化。发现 `TextInputMenuAgent` 仍是 9 月 30 日启动的进程；10 月 12 日 14:08 发送 TERM 后，确认系统已启动新的菜单进程。新进程启动后，轻言模式仍启用、图标 URL 正确，当前 Apple Pinyin 选择保留。用户确认刷新菜单后仍窄，说明仅刷新缓存不足以解决。`TextInputSwitcher` 未响应 TERM，未强制结束。
+- 第二轮改为 `InputIcon-Qingyan-Vector.pdf`：原字形轮廓和圆角背景用 even-odd 路径保留透明镂空，30 × 16 pt，构建号增至 18。AppKit 实际读取为单个 PDF representation，点尺寸、渲染后的透明/不透明区域检查通过；浅色与深色图稿已检查。此检查不代表系统菜单效果。
+- 矢量版完整构建、安装、严格签名与权限声明检查通过，菜单进程再次刷新。独立进程确认系统图标 URL 已指向 PDF，原 Apple Pinyin 选择保留。日志：`build/vector-icon-{build,install}.log`；备份：`~/Library/Application Support/LocalInput/Backups/20261012-141127-fCIL9T/LocalInput.zip`。用户确认宽度仍未变化，重启后又反馈输入源消失，实验已撤回。
 
 ## Jev 保留选词习惯（2026-10-11）
 
@@ -10,7 +29,15 @@
 - 已安装并重载输入法，恢复原输入源；安装包二进制与构建产物一致。旧版备份：`~/Library/Application Support/LocalInput/Backups/20261011-173731-yDb199/LocalInput.zip`。日志在 `build/candidate-learning-{build,tests,install}.log`。
 - 未做真实目标应用中的键盘/鼠标端到端验收；回归通过 Rime API 及实际持久化进程验证。设置说明已更新；离屏渲染仅能检查文本，原生 GroupBox/SecureField 受 ImageRenderer 支持限制。
 
-## 猜你想说 — text recognition on the CPU (2026-09-24)
+## 猜你想说 — text recognition survives cache purges (2026-09-25)
+
+- User report: 「猜你想说暂不可用 · TextRecognition.CRImageReaderError error 1」 again, with the CPU build below. The helper recognized 16 screenshots until 00:26; at 01:18 `deleted` logged `VQ_NEARLOWDISK` (12 GB free, purge goal 14.8 GB) and emptied its compiled-model cache, and every later request failed with E5RT code 13. Low-disk purges recurred 10 more times by 09:24.
+- The CPU setting had no effect: text recognition still ran on the Neural Engine (`aned`: `OCRUsingANE`); `usesCPUOnly`, the GPU and revision 2 behaved the same. The earlier check passed only because it ran in a fresh process. In fresh probe processes under this disk pressure, `VNRecognizeTextRequest` succeeded once (≈14 s Neural Engine compile) and failed on every later request, even after the cache folder was removed.
+- macOS 15's `RecognizeTextRequest` (TextRecognition's `textResults(image:…)` path) recognized repeatedly in one process, and after its cache files or whole folder were deleted mid-process it recompiled (≈14 s) and continued. Once `VNRecognizeTextRequest` had run in a process, `RecognizeTextRequest` failed too, so on macOS 15+ the helper now uses only the newer API; macOS 14 keeps the old request. The compute-device override was removed. Boxes match the old API (same normalized bottom-left rects within 0.003); on the settings screenshot 26 vs 28 lines (two fewer noise fragments), a few characters differ.
+- `--recognize-text` now takes several images and runs them in one process. Installed helper, cache purged: 5 images, 14.0 s then 0.13–1.25 s. End to end through the installed helper with a scratch fixture window (chat drawn without accessibility text, so screenshot OCR): three guesses 2.5 / 1.1 / 1.1 s; after deleting the helper's cache files while it kept running, 15.1 s (recompile) then 2.1 / 1.2 s — all 「截图识别」 with suggestions, no E5RT errors. Build, tests and install passed (`build/ocr-api-*.log`); certificate requirement unchanged.
+- Remaining: while free space stays under macOS's purge goal, the first guess after each purge waits ≈14 s for the recompile and can hit the input method's 15 s timeout; the next one is fast. Freeing disk space stops the purges.
+
+## 猜你想说 — text recognition on the CPU (2026-09-24, superseded above)
 
 - User report: 「猜你想说暂不可用 · TextRecognition.CRImageReaderError error 1」. The helper's log showed `E5RT Error: e5rt_execution_stream_operation_create_precompiled_compute_operation_with_options call failed (Code: 13)` on every request. Its compiled Neural Engine model cache, `~/Library/Caches/org.localinput.Voice/com.apple.e5rt.e5bundlecache`, still had its folders but 0 bytes of content (emptied 2026-09-24 16:04, presumably a system cache purge); the runtime failed instead of recompiling. A fresh process, which uses its own cache, recognized the same screenshot fine.
 - Text recognition now runs on the CPU for every compute stage (`setComputeDevice`). On this M4, for the 1970 × 1696 WeChat screenshot: CPU 0.25 s vs 1.32 s on the default path in a fresh process, same 55 lines. The stale cache was left in place (unused).

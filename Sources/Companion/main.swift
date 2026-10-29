@@ -14,14 +14,20 @@ if CommandLine.arguments.count >= 4 && CommandLine.arguments[1] == "--transcribe
     } catch { fputs("\(error.localizedDescription)\n", stderr); exit(1) }
 }
 
-if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--recognize-text" {
-    do {
-        let start = Date()
-        let lines = try ContextReader.recognizeText(in: URL(fileURLWithPath: CommandLine.arguments[2]))
-        print(lines.joined(separator: "\n"))
-        fputs(String(format: "Recognized %d lines in %.2fs\n", lines.count, Date().timeIntervalSince(start)), stderr)
-        exit(0)
-    } catch { fputs("\(error.localizedDescription)\n", stderr); exit(1) }
+// Several images run in one process, as in the helper: later requests are the ones that failed.
+if CommandLine.arguments.count >= 3 && CommandLine.arguments[1] == "--recognize-text" {
+    Task.detached {
+        do {
+            for path in CommandLine.arguments.dropFirst(2) {
+                let start = Date()
+                let lines = try await ContextReader.recognizeText(in: URL(fileURLWithPath: path))
+                print(lines.joined(separator: "\n"))
+                fputs(String(format: "Recognized %d lines in %.2fs\n", lines.count, Date().timeIntervalSince(start)), stderr)
+            }
+            exit(0)
+        } catch { fputs("\(error.localizedDescription)\n", stderr); exit(1) }
+    }
+    dispatchMain()
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
