@@ -9,6 +9,11 @@ xcrun clang -isysroot "$SDK" -fobjc-arc -arch arm64 -mmacosx-version-min=14.0 Te
   -I Sources/Bridge -L "$APP/Contents/Frameworks" -l rime.1 -framework Foundation \
   -Wl,-rpath,"$APP/Contents/Frameworks" -o build/rime-tests
 build/rime-tests "$APP/Contents/Resources/Rime" "$ROOT/build/test-user"
+xcrun clang -isysroot "$SDK" -fobjc-arc -arch arm64 -mmacosx-version-min=14.0 Tests/TypingSchemeTests.m build/RimeBridge.o \
+  -I Sources/Bridge -L "$APP/Contents/Frameworks" -l rime.1 -framework Foundation \
+  -Wl,-rpath,"$APP/Contents/Frameworks" -o build/typing-scheme-tests
+scheme_user=$(mktemp -d "$ROOT/build/typing-scheme-test.XXXXXX")
+build/typing-scheme-tests "$APP/Contents/Resources/Rime" "$scheme_user"
 xcrun swiftc -swift-version 5 -module-cache-path build/module-cache Sources/Shared/*.swift Tests/StateTests.swift -o build/state-tests
 xcrun swiftc -swift-version 5 -module-cache-path build/module-cache Sources/Shared/LiveVoice.swift Tests/LiveVoiceTests.swift -o build/live-voice-tests
 build/live-voice-tests

@@ -33,6 +33,12 @@ import AppKit
         check(migrated.language == "en" && migrated.fontSize == 23 && !migrated.shiftToggle && migrated.modelPath == "/tmp/custom.bin",
               "upgrade must preserve all existing preferences")
         check(migrated.voiceShortcut == .defaultShortcut, "legacy settings retain original shortcut")
+        check(migrated.typingScheme == .fullPinyin, "legacy settings retain full pinyin")
+        let unknownScheme = try JSONDecoder().decode(Settings.self, from: Data(#"{"typingScheme":"future-layout","language":"en"}"#.utf8))
+        check(unknownScheme.typingScheme == .fullPinyin && unknownScheme.language == "en", "unknown layout falls back without losing other settings")
+        migrated.typingScheme = .xiaoheDoublePinyin
+        let doublePinyinSettings = try JSONDecoder().decode(Settings.self, from: JSONEncoder().encode(migrated))
+        check(doublePinyinSettings.typingScheme == .xiaoheDoublePinyin, "double-pinyin choice survives save/reload")
         let custom = VoiceShortcut(keyCode: 9, modifiers: NSEvent.ModifierFlags([.control, .shift]).rawValue)
         migrated.voiceShortcut = custom
         let restored = try JSONDecoder().decode(Settings.self, from: JSONEncoder().encode(migrated))

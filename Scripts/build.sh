@@ -43,6 +43,7 @@ cp Vendor/sense-voice/model.int8.onnx Vendor/sense-voice/tokens.txt "$VOICE/Cont
 rm -rf "$APP/Contents/Resources/Rime"
 mkdir -p "$APP/Contents/Resources/Rime"
 cp Vendor/luna-pinyin/*.yaml Vendor/prelude/*.yaml "$APP/Contents/Resources/Rime/"
+cp Vendor/double-pinyin/double_pinyin_flypy.schema.yaml "$APP/Contents/Resources/Rime/"
 ditto Vendor/rime-ice/cn_dicts "$APP/Contents/Resources/Rime/cn_dicts"
 cp Resources/Rime/*.yaml "$APP/Contents/Resources/Rime/"
 # The luna dictionary is kept only for personal-phrase pronunciation lookup.
@@ -53,6 +54,7 @@ cat > "$APP/Contents/Resources/Rime/default.custom.yaml" <<'YAML'
 patch:
   schema_list:
     - schema: luna_pinyin_simp
+    - schema: double_pinyin_flypy
   menu/page_size: 5
   switcher/hotkeys: []
 YAML

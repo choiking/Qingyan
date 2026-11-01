@@ -8,6 +8,9 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)invalidateSessions;
 + (void)shutdown;
 - (BOOL)open;
+// Switching replaces only this client's session; failure never silently selects
+// a different spelling layout. -open retains the legacy full-pinyin behavior.
+- (BOOL)openSchema:(NSString *)schema;
 - (BOOL)process:(int)key modifiers:(int)modifiers;
 - (NSDictionary *)snapshot;
 - (NSString *)takeCommit;

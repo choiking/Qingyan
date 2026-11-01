@@ -11,6 +11,10 @@ struct JevSettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             Label("Jev 上下文选词", systemImage: "sparkles").font(.title2.bold())
+            if !service.settings.typingScheme.supportsJev {
+                Text("当前为小鹤双拼，打字使用本地候选。切回雾凇全拼后恢复 Jev 排序；下方测试示例仍是全拼示例，会使用 API 额度。")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
             Text("完整匹配优先。相同拼音下，已确认的词按使用次数、最近使用时间优先排列，其余候选再按 Jev 分数排序。")
             GroupBox {
                 VStack(alignment: .leading, spacing: 12) {

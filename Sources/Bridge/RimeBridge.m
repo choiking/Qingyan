@@ -31,6 +31,7 @@ static void fillTraits(RimeTraits *traits, NSString *shared, NSString *user) {
 @implementation LIRime {
     RimeSessionId _session;
     NSUInteger _generation;
+    NSString *_schema;
 }
 + (void)startShared:(NSString *)shared user:(NSString *)user deploy:(BOOL)deploy {
     api = rime_get_api();
@@ -53,15 +54,21 @@ static void fillTraits(RimeTraits *traits, NSString *shared, NSString *user) {
 // outdated word list. -open is what brings it back.
 - (RimeSessionId)session { return _generation == generation ? _session : 0; }
 - (BOOL)open {
+    return [self openSchema:@"luna_pinyin_simp"];
+}
+- (BOOL)openSchema:(NSString *)schema {
+    if (!api || ![@[@"luna_pinyin_simp", @"double_pinyin_flypy"] containsObject:schema]) return NO;
     // cleanup_all_sessions has already dropped it librime-side.
     if (_session && _generation != generation) { _session = 0; }
     _generation = generation;
-    if (_session) return YES;
+    if (_session && [_schema isEqualToString:schema]) return YES;
+    if (_session) { api->destroy_session(_session); _session = 0; }
     _session = api->create_session();
     if (!_session) return NO;
-    if (!api->select_schema(_session, "luna_pinyin_simp")) {
+    if (!api->select_schema(_session, schema.UTF8String)) {
         api->destroy_session(_session); _session = 0; return NO;
     }
+    _schema = [schema copy];
     api->set_option(_session, "ascii_mode", False);
     api->set_option(_session, "simplification", True);
     return YES;

@@ -36,6 +36,7 @@ enum LocalPaths {
 }
 
 struct Settings: Codable {
+    var typingScheme = TypingScheme.fullPinyin
     var language = "auto"
     var fontSize: Double = 18
     var shiftToggle = true
@@ -49,9 +50,10 @@ struct Settings: Codable {
     var guessShortcut = VoiceShortcut.defaultGuessShortcut
     var voiceShortcut = VoiceShortcut.defaultShortcut
     init() {}
-    private enum CodingKeys: String, CodingKey { case language, fontSize, shiftToggle, modelPath, voiceShortcut, voiceVocabulary, correctionEnabled, jevEnabled, wordStatsEnabled, contextGuessEnabled, contextSource, guessShortcut }
+    private enum CodingKeys: String, CodingKey { case typingScheme, language, fontSize, shiftToggle, modelPath, voiceShortcut, voiceVocabulary, correctionEnabled, jevEnabled, wordStatsEnabled, contextGuessEnabled, contextSource, guessShortcut }
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
+        typingScheme = (try? values.decode(TypingScheme.self, forKey: .typingScheme)) ?? .fullPinyin
         language = try values.decodeIfPresent(String.self, forKey: .language) ?? "auto"
         fontSize = try values.decodeIfPresent(Double.self, forKey: .fontSize) ?? 18
         shiftToggle = try values.decodeIfPresent(Bool.self, forKey: .shiftToggle) ?? true

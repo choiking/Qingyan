@@ -70,6 +70,13 @@ struct SettingsView: View {
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }.disabled(service.busy)
+                    Picker("拼音方案", selection: $service.settings.typingScheme) {
+                        ForEach(TypingScheme.allCases) { scheme in
+                            Text(scheme.title).tag(scheme)
+                        }
+                    }.onChange(of: service.settings.typingScheme) { service.saveSettings() }
+                    Text("切回输入框后生效。小鹤双拼使用雾凇词库与本地选词；不含小鹤音形的形码、简码及四码上屏，暂不使用 Jev 云端排序。")
+                        .font(.caption).foregroundStyle(.secondary)
                     Picker("语音语言", selection: $service.settings.language) {
                         Text("自动检测").tag("auto")
                         Text("中文").tag("zh")
