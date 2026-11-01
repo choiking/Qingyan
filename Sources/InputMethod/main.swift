@@ -5,7 +5,11 @@ let args = CommandLine.arguments
 if args.count == 4 && args[1] == "--deploy-rime" {
     LIRime.startShared(args[2], user: args[3], deploy: true)
     let engine = LIRime()
-    guard engine.open() else { fputs("Rime schema deployment failed\n", stderr); exit(1) }
+    for scheme in TypingScheme.allCases {
+        guard engine.openSchema(scheme.rawValue) else {
+            fputs("Rime schema deployment failed: \(scheme.rawValue)\n", stderr); exit(1)
+        }
+    }
     print("Rime schema deployed")
     exit(0)
 }

@@ -1,0 +1,13 @@
+# Qingyan integration of the pinned Rime upstream Xiaohe double-pinyin schema.
+# Use Ice vocabulary with a separate spelling prism and learned user dictionary.
+# No stroke reverse-lookup data is shipped by Qingyan.
+patch:
+  schema/name: 轻言·小鹤双拼
+  schema/dependencies: []
+  engine/translators:
+    - punct_translator
+    - script_translator
+  translator/dictionary: rime_ice
+  translator/user_dict: double_pinyin_flypy
+  grammar/language: zh-hans-t-essay-bgw
+  recognizer/patterns/reverse_lookup: null

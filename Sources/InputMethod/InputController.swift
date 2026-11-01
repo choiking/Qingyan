@@ -11,6 +11,7 @@ enum RimeData {
 @objc(LocalInputController)
 final class LocalInputController: IMKInputController {
     private let engine = LIRime()
+    private var typingScheme = TypingScheme.fullPinyin
     private let panel = CandidatePanel()
     private var english = false
     private var hasMarkedText = false
@@ -71,8 +72,9 @@ final class LocalInputController: IMKInputController {
                                   dictionaryAt: RimeData.pinyinDictionary, userDirectory: RimeData.user) {
             LIRime.invalidateSessions()
         }
-        if !engine.open() {
-            panel.show(title: "拼音词库未就绪", detail: "英文仍可输入 · 请重新运行安装包构建", anchor: anchor())
+        typingScheme = Settings.load().typingScheme
+        if !engine.openSchema(typingScheme.rawValue) {
+            panel.show(title: "\(typingScheme.title)未就绪", detail: "英文仍可输入 · 请重新运行安装包构建", anchor: anchor())
         }
     }
     override func deactivateServer(_ sender: Any!) {
@@ -237,7 +239,7 @@ final class LocalInputController: IMKInputController {
         cancelJev()
         let commit = engine.takeCommit()
         if !commit.isEmpty {
-            if let spelling = learningSpelling, engine.rawInput().isEmpty {
+            if typingScheme.supportsJev, let spelling = learningSpelling, engine.rawInput().isEmpty {
                 CandidateLearningStore.shared.record(spelling: spelling, commit: commit)
             }
             client()?.insertText(commit, replacementRange: replacement); hasMarkedText = false
@@ -334,6 +336,9 @@ final class LocalInputController: IMKInputController {
     }
     private func scheduleJev(_ snapshot: [AnyHashable: Any]) {
         guard active, Settings.load().jevEnabled else { return }
+        guard typingScheme.supportsJev else {
+            jevStatus = "小鹤双拼 · 使用本地候选"; return
+        }
         guard !manualCandidates, snapshot["page"] as? Int == 0 else {
             jevStatus = "Jev 暂停 · 手动选词"; return
         }
